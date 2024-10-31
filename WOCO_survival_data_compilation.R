@@ -6,11 +6,11 @@
 ## goal is to estimate WHEN birds depart so that hunters can be confident they don't shoot Swiss birds
 
 ## QUESTIONS TO MURDY:
-# what does 'censor' mean?
-# what temporal resolution do we want (weekly ok)?
-# extent of season (Sept - Nov), what is the intermittent dip in effort?
+# what does 'censor' mean? check with Michi if censoring necessary for migration
+# what temporal resolution do we want (weekly ok)? yes
+# extent of season (Sept - Nov), what is the intermittent dip in effort? monthly capture events
 # do we have a metric of observation effort?
-# what are age categories 1-8? EURING Code?
+# what are age categories 1-8? EURING Code? Only needed if age affects departure or survival
 # annual variation in survival, detection, migration?
 
 
@@ -58,11 +58,35 @@ table(woco$Beobachtung)
 table(woco$Markierung)
 table(woco$Censor)
 length(unique(woco$Ring_num))
-woco %>% filter(month(Datum) %in% c(9,10,11)) %>%
+woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
   mutate(jday=yday(Datum)) %>%
   ggplot(aes(x=jday)) + geom_histogram()
 
 table(woco$Beobachtung, woco$Ort)
+
+
+## check last observation per bird in study area
+woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  filter(Ort=="UG") %>%
+  mutate(year=year(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  mutate(jday=yday(Datum)) %>%
+  mutate(date=ymd("2023-12-31")+days(jday)) %>%
+  group_by(id) %>%
+  summarise(last=max(date)) %>%
+  ggplot(aes(x=last)) +
+  geom_histogram(aes(x=last,y=(..count..)/tapply(..count..,..PANEL..,sum)[..PANEL..]),binwidth=7)+                               
+  scale_x_date(name="last obs in study area",date_breaks="1 week", date_labels="%d-%b")+
+  labs(y="proportion of woodcocks") +
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x=element_text(size=12, color="black",angle=45,hjust = 1),
+        axis.text.y=element_text(size=18, color="black"), 
+        axis.title=element_text(size=18), 
+        strip.text.x=element_text(size=18, color="black"), 
+        strip.background=element_rect(fill="white", colour="black"))
+ggsave("output/prop_woodcock_per_week_rawdat.jpg", width=7, height=6)
+
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # DATA PREPARATION APPROACH
@@ -115,7 +139,7 @@ woco_ann_ch_true<-woco %>%
   mutate(year=year(Datum), week=paste('wk',week(Datum),"")) %>%
   mutate(id=paste(Ring_num,year, sep="_")) %>%
   select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
-  filter(month(Datum) >8) %>%
+  filter(month(Datum) >7) %>%
   filter(Beobachtung!="Senderfund") %>%
   filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
   mutate(TS=ifelse(Beobachtung=="Fang",1,
@@ -132,7 +156,7 @@ woco_ann_ch_obs<-woco %>%
   mutate(year=year(Datum), week=paste('wk',week(Datum),"")) %>%
   mutate(id=paste(Ring_num,year, sep="_")) %>%
   select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
-  filter(month(Datum) >8) %>%
+  filter(month(Datum) >7) %>%
   filter(Beobachtung!="Senderfund") %>%
   filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
   mutate(OS=ifelse(Beobachtung=="Fang",1,
@@ -163,11 +187,11 @@ dim(woco.obs.matrix)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ### FILL MATRICES WITH STATE INFORMATION ###
-for(i in 1:nrow(woco.obs.matrix$id)){
+for(i in 1:nrow(woco.obs.matrix)){
   
   ### extract ind and year
-  yr<-separate_wider_delim(woco_ann_ch[i,],cols="id",delim="_", names=c('ring','year'))$year
-  rn<-separate_wider_delim(woco_ann_ch[i,],cols="id",delim="_", names=c('ring','year'))$ring
+  yr<-separate_wider_delim(woco_ann_ch_obs[i,],cols="id",delim="_", names=c('ring','year'))$year
+  rn<-separate_wider_delim(woco_ann_ch_obs[i,],cols="id",delim="_", names=c('ring','year'))$ring
   
   ### extract start and end dates for selected bird
   daterange<-woco %>%
@@ -178,81 +202,84 @@ for(i in 1:nrow(woco.obs.matrix$id)){
   
   ### ASSIGN OBSERVED STATES
   startcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]!=6))
-  if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol-1)]<-6} else {
-    woco.obs.matrix[i,2:(startcol-1)]<-NA}
+  if(startcol>1){
+    if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol)]<-6} else {
+      woco.obs.matrix[i,2:(startcol)]<-NA}
+  }
+
   stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<6))
-  if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-3} else {  ## birds that survived until next year are labelled to have been recorded outside study area
-    woco.obs.matrix[i,(stopcol+1):dim(woco.obs.matrix)[2]]<-6}
+  if((stopcol+1)<dim(woco.obs.matrix)[2]){
+    if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-3} else {  ## birds that survived until next year are labelled to have been recorded outside study area
+      woco.obs.matrix[i,(stopcol+2):dim(woco.obs.matrix)[2]]<-6}
+  }
+
   
   ### ENSURE THAT DEAD BIRDS STAY DEAD
   if(TRUE %in% (c(4,5) %in% woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]])){
     deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(4,5)))
-    woco.obs.matrix[i,(deadcol+1):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,deadcol]  ## assign the same state as last observed for rest of time series
+    woco.obs.matrix[i,(deadcol+2):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,(deadcol+1)]  ## assign the same state as last observed for rest of time series
   }
 
   ## ASSIGN INITIAL TRUE STATE (to initialise z-matrix of model)
   ### this needs careful manipulation to appropriately configure intermediate 0s
   startcol<-min(which(!is.na(woco.state.matrix[i,2:dim(woco.state.matrix)[2]])))
   stopcol<-max(which(!is.na(woco.state.matrix[i,2:dim(woco.state.matrix)[2]])))  
-  startstate<-woco.state.matrix[i,startcol]
-  endstate<-woco.state.matrix[i,stopcol]
-  if(year(daterange$first)<yr) {woco.state.matrix[i,2:(startcol-1)]<-startstate} ## anything before first obs gets same state as first obs
-  woco.state.matrix[i,(stopcol+1):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
+  startstate<-woco.state.matrix[i,startcol+1]
+  endstate<-woco.state.matrix[i,stopcol+1]
+  if(startcol>1){
+    if(year(daterange$first)<yr) {woco.state.matrix[i,2:startcol]<-startstate} ## anything before first obs gets same state as first obs
+  }
+  if((stopcol+1)<dim(woco.state.matrix)[2]){
+    woco.state.matrix[i,(stopcol+2):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
+  }
   if(year(daterange$last)>yr) {
     woco.state.matrix[i,dim(woco.state.matrix)[2]]<-3  ## last column is always alive outside study area if bird also recorded next year
   }
 }
 
-## CHECK FOR NA IN ANY OF THE MATRICES -----------------
-## none of these should contain any NA because it will fail the model
-any(is.na(woco.dep.matrix))
-
-## these will contain NA before individuals enter the time series
-any(is.na(woco.age.matrix))
-any(is.na(woco.obs.matrix))
-any(is.na(woco.state.matrix))
-
-# which(woco.obs.matrix==5, arr.ind=T)
-# woco.obs.matrix[57,20:40]
 
 
 #### Convert to numeric matrices that NIMBLE can loop over
-y.telemetry<-as.matrix(woco.obs.matrix[,2:(max(timeseries$col)+1)])
-z.telemetry<-as.matrix(woco.state.matrix[,2:(max(timeseries$col)+1)])
-age.mat<-as.matrix(woco.age.matrix[,2:(max(timeseries$col)+1)])
-dep.mat<-as.matrix(woco.dep.matrix[,2:(max(timeseries$col)+1)])
+y.telemetry<-as.matrix(woco.obs.matrix[,2:(dim(woco.state.matrix)[2])])
+z.telemetry<-as.matrix(woco.state.matrix[,2:(dim(woco.state.matrix)[2])])
 
-#### SCALE THE AGE SO THAT NUMERICAL OVERFLOW DOES NOT OCCUR
-dim(age.mat)
-dim(dep.mat)
-dim(y.telemetry)
-dim(z.telemetry)
+
+#### PREPARE A MATRIX OF WEEKS
+nyears<-dim(woco_ch)[2]-1
+nweeks<-dim(y.telemetry)[2]
+nind<-dim(y.telemetry)[1]
+week<-seq(1:nweeks)
+year<-as.numeric(as.factor(separate_wider_delim(woco_ann_ch_obs,cols="id",delim="_", names=c('ring','year'))$year))
+tag<-
+effort<-
 
 #### create vector of first marking and of last alive record
 get.first.telemetry<-function(x)min(which(!is.na(x)))
-get.last.telemetry<-function(x)max(which(!is.na(x) & x==1))
+get.last.telemetry<-function(x)max(which(!is.na(x) & x<6))
 f.telemetry<-apply(y.telemetry,1,get.first.telemetry)
 l.telemetry<-apply(y.telemetry,1,get.last.telemetry)
 
 
 ############# SAVE AND RE-LOAD PREPARED DATA ----------
-save.image("data/woco_surv_tradeoff_input.RData")
-load("data/woco_surv_tradeoff_input.RData")
+save.image("data/woco_mig_input.RData")
+load("data/woco_mig_input.RData")
+
+
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # SETTING UP NIMBLE CODE FOR SURVIVAL MODEL
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Specify model in NIMBLE format
-surv.model<-nimbleCode({
+woco.mig.model<-nimbleCode({
   
   # -------------------------------------------------
   # Parameters:
-  # phi: seasonal survival probability intercept
-  # tag.fail: probability that tag failed or was lost
+  # phi: weekly survival probability intercept
+  # mig: weekly migration probability
   
-  # probability to be tracked with functioning tag is assumed to be perfect (=1) and not included as parameter
-  # p.obs: probability to be observed alive despite the tag being defunct
+  # p.obs: probability to be observed alive even through capture or transmitter
   # p.found.dead: probability for carcass to be recovered
   
   # -------------------------------------------------
@@ -278,41 +305,54 @@ surv.model<-nimbleCode({
   #### WEEKLY SURVIVAL, MIGRATION and DETECTION PROBABILITIES
   for (i in 1:nind){
     for (t in f[i]:(n.occasions)){
-      logit(phi[i,t]) <- lp.mean[year[i]] +      ### intercept for mean survival
-        b.phi.season*(season[t]) +     ### survival dependent on season
+      phi[i,t] <- mean.phi[year[i]] #+      ###
+      p.dead.in[i,t] <- mean.p.dead.in[year[i]] #+      ###
+      p.dead.out[i,t] <- mean.p.dead.out[year[i]] #+      ###
         
       logit(mig[i,t]) <- lm.mean +      ### intercept for mean survival
-          b.mig.week*(season[t])     ### survival dependent on season
+          b.mig.week*(week[t])     ### survival dependent on season
+      
+      logit(p.obs.in[i,t]) <- lpin.mean +      ### intercept for mean survival
+        b.obs.effort*(effort[year[i],week[t]]) +    ### observation dependent on effort in that week and year
+        b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
+      
+      logit(p.obs.out[i,t]) <- lpout.mean +      ### intercept for mean survival
+        b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
 
     } #t
   } #i
   
   #### BASELINE FOR SURVIVAL PROBABILITY (varies by year)
   for(s in 1:nyears) {
-    mean.phi[s] ~ dbeta(15, 2)   # fairly uninformative prior intercept for all monthly survival probabilities
-    lp.mean[s] <- log(mean.phi/(1 - mean.phi))    # logit transformed survival intercept
+    mean.phi[s] ~ runif(0.9,1)   # fairly uninformative prior for weekly survival probabilities
+    #lp.mean[s] <- log(mean.phi[s]/(1 - mean.phi[s]))    # logit transformed survival intercept
+    
+    #### DEAD RECOVERY PROBABILITY VARIES BY YEAR
+      mean.p.dead.in[s] ~ dunif(0,1)
+      mean.p.dead.out[s] ~ dunif(0,0.3)
   }
   
+  #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
+  mean.mig ~ runif(0,1)   # fairly uninformative prior for weekly survival probabilities
+  lm.mean <- log(mean.mig/(1 - mean.mig))    # logit transformed migration intercept
   
-  #### SLOPE PARAMETERS FOR SURVIVAL PROBABILITY
-  b.phi.age ~ dnorm(0, tau=0.001)           # Prior for age effect on survival probability on logit scale
-  b.phi.season ~ dnorm(0, tau=0.001)           # Prior for season effect on survival probability on logit scale
-  b.phi.pfdp ~ dunif(-2,2)         # Prior for migration effect on survival probability on logit scale
-  #b.phi.sex ~ dnorm(0, tau=0.001)         # Prior for sex effect on survival probability on logit scale 
- 
+  #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
+  mean.p.in ~ runif(0,1)   # fairly uninformative prior for weekly detection probabilities
+  lpin.mean <- log(mean.p.in/(1 - mean.p.in))    # logit transformed detection intercept
   
-  #### TAG FAILURE AND LOSS PROBABILITY
-  for (i in 1:nind){
-    p.obs.ind[i] ~ dunif(0,1)
-    tag.fail.ind[i] ~ dunif(0,1)
-    p.found.dead.ind[i] ~ dunif(0,1)
-    
-    for (t in f[i]:(n.occasions)){
-      p.obs[i,t] <-p.obs.ind[i]
-      tag.fail[i,t] <- tag.fail.ind[i]
-      p.found.dead[i,t] <- p.found.dead.ind[i]
-    } #t
-  } #i
+  mean.p.out ~ runif(0,0.3)   # fairly uninformative prior for weekly detection probabilities
+  lpout.mean <- log(mean.p.out/(1 - mean.p.out))    # logit transformed detection intercept
+  
+  #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
+  b.mig.week ~ dunif(0,2)         # Prior for week effect on migration probability on logit scale - must be positive
+  b.obs.effort ~ dunif(0, 2)         # Prior for effort effect on observation probability on logit scale  - must be positive
+  b.obs.tag ~ dunif(0, 2)         # Prior for tag effect on observation probability on logit scale  - must be positive 
+  
+  # #### DEAD RECOVERY PROBABILITY VARIES BY INDIVIDUAL
+  # for (i in 1:nind){
+  #   p.found.dead.in[i] ~ dunif(0,1)
+  #   p.found.dead.out[i] ~ dunif(0,0.3)
+  # } #i
   
   
 
