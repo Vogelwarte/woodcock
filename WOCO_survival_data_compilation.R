@@ -6,11 +6,12 @@
 ## goal is to estimate WHEN birds depart so that hunters can be confident they don't shoot Swiss birds
 
 ## QUESTIONS TO MURDY:
-# - what does 'censor' mean?
-# - what temporal resolution do we want (weekly ok)?
-# - extent of season (Sept - Nov), what is the intermittent dip in effort?
+# what does 'censor' mean?
+# what temporal resolution do we want (weekly ok)?
+# extent of season (Sept - Nov), what is the intermittent dip in effort?
 # do we have a metric of observation effort?
 # what are age categories 1-8? EURING Code?
+# annual variation in survival, detection, migration?
 
 
 # Clear workspace ---------------------------------------------------------
@@ -27,8 +28,8 @@ filter<-dplyr::filter
 select<-dplyr::select
 
 ## set root folder for project
-#setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
-setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
+#setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
 
 # Load data ---------------------------------------------------------------
 
@@ -69,9 +70,10 @@ table(woco$Beobachtung, woco$Ort)
 ## for each individual and year, create weekly occasions for Sept to Nov
 ## use data from following year to determine whether bird survived or not
 # True States (S) - these are often unknown and cannot be observed
-# 1 dead
-# 2 alive in study area
+# 1 alive in study area
+# 2 dead in study area
 # 3 alive outside study area (after migration)
+# 4 dead outside study area (shot after after migration)
 
   # Observed States (O) - these are based on the actual transmission history
   # 1 Bird (re)captured alive
@@ -109,7 +111,24 @@ woco_ch <- woco %>%
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ### weekly encounter history ####
-woco_ann_ch<-woco %>%
+woco_ann_ch_true<-woco %>%
+  mutate(year=year(Datum), week=paste('wk',week(Datum),"")) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
+  filter(month(Datum) >8) %>%
+  filter(Beobachtung!="Senderfund") %>%
+  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
+  mutate(TS=ifelse(Beobachtung=="Fang",1,
+                   ifelse((Beobachtung=="Senderlokalisation" & Ort=="UG"),1,
+                          ifelse((Beobachtung=="Senderlokalisation" & Ort!="UG"),3,
+                                 ifelse((Beobachtung=="Totfund" & Ort=="UG"),2,
+                                        ifelse((Beobachtung=="Totfund" & Ort!="UG"),4,99)))))) %>% ## there should be no 99filter(TS==99)
+  group_by(id, week) %>%
+  summarise(N=max(TS)) %>%
+  spread(key=week, value=N, fill=NA) %>%
+  mutate(wk54=NA)  ## create blank column for records past the migration season
+
+woco_ann_ch_obs<-woco %>%
   mutate(year=year(Datum), week=paste('wk',week(Datum),"")) %>%
   mutate(id=paste(Ring_num,year, sep="_")) %>%
   select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
@@ -127,11 +146,15 @@ woco_ann_ch<-woco %>%
   mutate(wk54=6)  ## create blank column for records past the migration season
 
 
+
+
+
+
 ### CREATE BLANK MATRICES TO HOLD INFORMATION ABOUT TRUE AND OBSERVED STATES ###
 
-woco.obs.matrix<-woco_ann_ch %>% arrange(id)
-woco.state.matrix<-woco_ann_ch %>% arrange(id)
-
+woco.obs.matrix<-woco_ann_ch_obs %>% arrange(id)
+woco.state.matrix<-woco_ann_ch_true %>% arrange(id)
+dim(woco.obs.matrix)
 
 
 
@@ -143,8 +166,8 @@ woco.state.matrix<-woco_ann_ch %>% arrange(id)
 for(i in 1:nrow(woco.obs.matrix$id)){
   
   ### extract ind and year
-  yr=separate_wider_delim(woco_ann_ch[i,],cols="id",delim="_", names=c('ring','year'))$year
-  rn=separate_wider_delim(woco_ann_ch[i,],cols="id",delim="_", names=c('ring','year'))$ring
+  yr<-separate_wider_delim(woco_ann_ch[i,],cols="id",delim="_", names=c('ring','year'))$year
+  rn<-separate_wider_delim(woco_ann_ch[i,],cols="id",delim="_", names=c('ring','year'))$ring
   
   ### extract start and end dates for selected bird
   daterange<-woco %>%
@@ -153,27 +176,31 @@ for(i in 1:nrow(woco.obs.matrix$id)){
     filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
     summarise(first=min(Datum),last=max(Datum))
   
-  ### specify columns in matrix to populate
-  startcol<-min(which(woco.obs.matrix[i,2:20]!=6))
-  if(year(daterange$first)<yr) {startcol<-2}
-  stopcol<-max(which(woco.obs.matrix[i,2:20]<4))
-  if(year(daterange$last)>yr) {stopcol<-20}
+  ### ASSIGN OBSERVED STATES
+  startcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]!=6))
+  if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol-1)]<-6} else {
+    woco.obs.matrix[i,2:(startcol-1)]<-NA}
+  stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<6))
+  if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-3} else {  ## birds that survived until next year are labelled to have been recorded outside study area
+    woco.obs.matrix[i,(stopcol+1):dim(woco.obs.matrix)[2]]<-6}
   
-  ## ASSIGN OBSERVED STATE
+  ### ENSURE THAT DEAD BIRDS STAY DEAD
+  if(TRUE %in% (c(4,5) %in% woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]])){
+    deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(4,5)))
+    woco.obs.matrix[i,(deadcol+1):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,deadcol]  ## assign the same state as last observed for rest of time series
+  }
 
-  woco.obs.matrix[woco.obs.matrix$individual_id==i,startcol:(stopcol-1)]<-ifelse(CH[CH$individual_id==i,startcol:(stopcol-1)]==1,1,5)  ## if there are no data then label it with 5
-  if(startcol==stopcol){woco.obs.matrix[woco.obs.matrix$individual_id==i,2:(stopcol-1)]<-NA} ## for the few cases where stopcol-1 is actually before startcol
-  
-  ### add the final observation and extend to end of time series
-  woco.obs.matrix[woco.obs.matrix$individual_id==i,stopcol:(max(timeseries$col)+1)]<-wocoinds$OS[wocoinds$individual.local.identifier==i]   ## this assumes that state never changes - some birds may have gone off air and then been found dead - this needs manual adjustment!
-  
   ## ASSIGN INITIAL TRUE STATE (to initialise z-matrix of model)
   ### this needs careful manipulation to appropriately configure intermediate 0s
-  woco.state.matrix[woco.state.matrix$individual_id==i,(startcol+1):(stopcol-1)]<-2      ## state at first capture is known, hence must be NA in z-matrix
-  woco.state.matrix[woco.state.matrix$individual_id==i,stopcol:(max(timeseries$col)+1)]<-wocoinds$TS[wocoinds$individual.local.identifier==i]   ## this assumes that state never changes - some birds may have gone off air and then been found dead - this needs manual adjustment!
-  woco.state.matrix[woco.state.matrix$individual_id==i,2:startcol]<-NA ## error occurs if z at first occ is not NA, so we need to specify that for birds alive for <1 month because stopcol-1 = startcol
-  
-
+  startcol<-min(which(!is.na(woco.state.matrix[i,2:dim(woco.state.matrix)[2]])))
+  stopcol<-max(which(!is.na(woco.state.matrix[i,2:dim(woco.state.matrix)[2]])))  
+  startstate<-woco.state.matrix[i,startcol]
+  endstate<-woco.state.matrix[i,stopcol]
+  if(year(daterange$first)<yr) {woco.state.matrix[i,2:(startcol-1)]<-startstate} ## anything before first obs gets same state as first obs
+  woco.state.matrix[i,(stopcol+1):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
+  if(year(daterange$last)>yr) {
+    woco.state.matrix[i,dim(woco.state.matrix)[2]]<-3  ## last column is always alive outside study area if bird also recorded next year
+  }
 }
 
 ## CHECK FOR NA IN ANY OF THE MATRICES -----------------
@@ -196,10 +223,6 @@ age.mat<-as.matrix(woco.age.matrix[,2:(max(timeseries$col)+1)])
 dep.mat<-as.matrix(woco.dep.matrix[,2:(max(timeseries$col)+1)])
 
 #### SCALE THE AGE SO THAT NUMERICAL OVERFLOW DOES NOT OCCUR
-max(age.mat, na.rm=T)
-age.mat<-ifelse(age.mat>48,48,age.mat)
-agescale<-scale(1:max(age.mat, na.rm=T))
-#feedscale<-scale(1:max(feed.mat, na.rm=T))
 dim(age.mat)
 dim(dep.mat)
 dim(y.telemetry)
@@ -210,13 +233,6 @@ get.first.telemetry<-function(x)min(which(!is.na(x)))
 get.last.telemetry<-function(x)max(which(!is.na(x) & x==1))
 f.telemetry<-apply(y.telemetry,1,get.first.telemetry)
 l.telemetry<-apply(y.telemetry,1,get.last.telemetry)
-
-#### CREATE VECTOR OF PFDP
-pfdp.vec<-wocoinds %>%
-  mutate(PFPD=ifelse(is.na(PFPD),0,PFPD)) %>%
-  arrange(individual.local.identifier) %>%
-  select(PFPD)
-pfdp.scale<-as.numeric(scale(as.numeric(pfdp.vec$PFPD)))
 
 
 ############# SAVE AND RE-LOAD PREPARED DATA ----------
@@ -240,39 +256,42 @@ surv.model<-nimbleCode({
   # p.found.dead: probability for carcass to be recovered
   
   # -------------------------------------------------
-  # States (S):
-  # 1 dead
-  # 2 alive with functioning tag
-  # 3 alive with defunct tag or tag lost
+  # True States (S) - these are often unknown and cannot be observed
+  # 1 alive in study area
+  # 2 dead in study area
+  # 3 alive outside study area (after migration)
+  # 4 dead outside study area (shot after after migration)
   
-  # Observations (O):
-  # 1 Tag ok, bird moving
-  # 2 Tag ok, bird not moving (dead, or tag lost and no longer on bird)
-  # 3 Tag failed, bird observed alive
-  # 4 Dead bird recovered
-  # 5 No signal (=not seen, status unknown)
+  # Observed States (O) - these are based on the actual transmission history
+  # 1 Bird (re)captured alive
+  # 2 Bird recorded via transmitter in study area
+  # 3 Bird recorded via transmitter outside study area
+  # 4 Dead bird recovered  in study area
+  # 5 Dead bird recovered  outside study area
+  # 6 No signal (=not observed)
   
   # -------------------------------------------------
   
   # Priors and constraints
   
   
-  #### MONTHLY SURVIVAL PROBABILITY
+  #### WEEKLY SURVIVAL, MIGRATION and DETECTION PROBABILITIES
   for (i in 1:nind){
     for (t in f[i]:(n.occasions)){
-      logit(phi[i,t]) <- lp.mean +      ### intercept for mean survival
+      logit(phi[i,t]) <- lp.mean[year[i]] +      ### intercept for mean survival
         b.phi.season*(season[t]) +     ### survival dependent on season
-        b.phi.pfdp*(pfdp[i])*(1-dep[i,t]) +     ### survival dependent on PFDP only for months after dependence
-        b.phi.age*(age[i,t])    ### survival dependent on age (in years)
+        
+      logit(mig[i,t]) <- lm.mean +      ### intercept for mean survival
+          b.mig.week*(season[t])     ### survival dependent on season
 
     } #t
   } #i
   
-  #### BASELINE FOR SURVIVAL PROBABILITY (varies by season)
-  #for(s in 1:2) {
-    mean.phi ~ dbeta(15, 2)   # fairly uninformative prior intercept for all monthly survival probabilities
-    lp.mean <- log(mean.phi/(1 - mean.phi))    # logit transformed survival intercept
-  #}
+  #### BASELINE FOR SURVIVAL PROBABILITY (varies by year)
+  for(s in 1:nyears) {
+    mean.phi[s] ~ dbeta(15, 2)   # fairly uninformative prior intercept for all monthly survival probabilities
+    lp.mean[s] <- log(mean.phi/(1 - mean.phi))    # logit transformed survival intercept
+  }
   
   
   #### SLOPE PARAMETERS FOR SURVIVAL PROBABILITY
@@ -289,9 +308,6 @@ surv.model<-nimbleCode({
     p.found.dead.ind[i] ~ dunif(0,1)
     
     for (t in f[i]:(n.occasions)){
-      # logit(p.obs[i,t]) <- base.obs
-      # logit(tag.fail[i,t]) <- base.fail
-      # logit(p.found.dead[i,t]) <- base.recover
       p.obs[i,t] <-p.obs.ind[i]
       tag.fail[i,t] <- tag.fail.ind[i]
       p.found.dead[i,t] <- p.found.dead.ind[i]
@@ -299,12 +315,7 @@ surv.model<-nimbleCode({
   } #i
   
   
-  ##### SLOPE PARAMETERS FOR OBSERVATION PROBABILITY
-  # base.obs ~ dnorm(-2, tau=0.001)                # Prior for observation probability of birds with malfunctioning transmitter on logit scale
-  # base.fail ~ dnorm(-1, tau=0.001)               # Prior for tag failure probability on logit scale
-  # base.recover ~ dnorm(0.5, tau=0.001)            # Prior for probability to recover dead bird on logit scale
-  
-  
+
   # -------------------------------------------------
   # Define state-transition and observation matrices 
   # -------------------------------------------------
@@ -318,14 +329,22 @@ surv.model<-nimbleCode({
       ps[1,i,t,1]<-1    ## dead birds stay dead
       ps[1,i,t,2]<-0
       ps[1,i,t,3]<-0
+      ps[1,i,t,4]<-0
       
       ps[2,i,t,1]<-(1-phi[i,t])
       ps[2,i,t,2]<-phi[i,t] * (1-tag.fail[i,t])
       ps[2,i,t,3]<-phi[i,t] * tag.fail[i,t]
+      ps[2,i,t,4]<-phi[i,t] * tag.fail[i,t]
       
       ps[3,i,t,1]<-(1-phi[i,t])
       ps[3,i,t,2]<-0
       ps[3,i,t,3]<-phi[i,t]
+      ps[3,i,t,4]<-phi[i,t]
+      
+      ps[4,i,t,1]<-(1-phi[i,t])
+      ps[4,i,t,2]<-0
+      ps[4,i,t,3]<-phi[i,t]
+      ps[4,i,t,4]<-phi[i,t]
       
       # Define probabilities of O(t) [last dim] given S(t)  [first dim]
       
@@ -334,18 +353,28 @@ surv.model<-nimbleCode({
       po[1,i,t,3]<-0
       po[1,i,t,4]<-p.found.dead[i,t]
       po[1,i,t,5]<-(1-p.obs[i,t]) * tag.fail[i,t] * (1-p.found.dead[i,t])
+      po[1,i,t,6]<-(1-p.obs[i,t]) * tag.fail[i,t] * (1-p.found.dead[i,t])
       
       po[2,i,t,1]<-(1-tag.fail[i,t])
       po[2,i,t,2]<-0
       po[2,i,t,3]<-0
       po[2,i,t,4]<-0
       po[2,i,t,5]<-tag.fail[i,t]
+      po[2,i,t,6]<-tag.fail[i,t]
       
       po[3,i,t,1]<-0
       po[3,i,t,2]<-0
       po[3,i,t,3]<-p.obs[i,t]
       po[3,i,t,4]<-0
       po[3,i,t,5]<-(1-p.obs[i,t])
+      po[3,i,t,6]<-(1-p.obs[i,t])
+      
+      po[4,i,t,1]<-0
+      po[4,i,t,2]<-0
+      po[4,i,t,3]<-p.obs[i,t]
+      po[4,i,t,4]<-0
+      po[4,i,t,5]<-(1-p.obs[i,t])
+      po[4,i,t,6]<-(1-p.obs[i,t])
       
     } #t
   } #i
