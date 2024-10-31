@@ -184,7 +184,7 @@ woco_ann_ch_obs<-woco %>%
   group_by(id, week) %>%
   summarise(N=max(OS)) %>%
   spread(key=week, value=N, fill=5) %>%
-  mutate(wk54=6)  ## create blank column for records past the migration season
+  mutate(wk54=5)  ## create blank column for records past the migration season
 
 
 woco_tag_mat<- woco %>%
@@ -200,6 +200,21 @@ woco_tag_mat<- woco %>%
   mutate(tag=ifelse(Markierung=="Sender",1,0)) %>%
   group_by(id) %>%
   summarise(tag=max(tag))
+
+
+### temporary matrix until Pierre can deliver true effort data
+effort_mat<- woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(week=ifelse(week<31,31,week)) %>%
+  mutate(obs=1) %>%
+  filter(week>30) %>%
+  mutate(week=paste0('wk',week)) %>%
+  filter(Beobachtung!="Senderfund") %>%
+  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
+  group_by(year,week) %>%
+  summarise(eff=sum(obs)) %>%
+  spread(key=week,value=eff, fill=0) %>%
+  mutate(wk54=2)  ## create blank column for records past the migration season
 
 
 
@@ -231,22 +246,22 @@ for(i in 1:nrow(woco.obs.matrix)){
     summarise(first=min(Datum),last=max(Datum))
   
   ### ASSIGN OBSERVED STATES
-  startcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]!=6))
+  startcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]!=5))
   if(startcol>1){
-    if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol)]<-6} else {
+    if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol)]<-5} else {
       woco.obs.matrix[i,2:(startcol)]<-NA}
   }
 
-  stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<6))
+  stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<5))
   if((stopcol+1)<dim(woco.obs.matrix)[2]){
     if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-3} else {  ## birds that survived until next year are labelled to have been recorded outside study area
-      woco.obs.matrix[i,(stopcol+2):dim(woco.obs.matrix)[2]]<-6}
+      woco.obs.matrix[i,(stopcol+2):dim(woco.obs.matrix)[2]]<-5}
   }
 
   
   ### ENSURE THAT DEAD BIRDS STAY DEAD
-  if(TRUE %in% (c(4,5) %in% woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]])){
-    deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(4,5)))
+  if(TRUE %in% (c(3,4) %in% woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]])){
+    deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(3,4)))
     woco.obs.matrix[i,(deadcol+2):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,(deadcol+1)]  ## assign the same state as last observed for rest of time series
   }
 
@@ -280,7 +295,7 @@ nweeks<-dim(y.telemetry)[2]
 nind<-dim(y.telemetry)[1]
 week<-seq(1:nweeks)
 year<-as.numeric(as.factor(separate_wider_delim(woco_ann_ch_obs,cols="id",delim="_", names=c('ring','year'))$year))
-#effort<-
+effort<-effort_mat[,-1]
 
 #### create vector of first marking and of last alive record
 get.first.telemetry<-function(x)min(which(!is.na(x)))
