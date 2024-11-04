@@ -295,6 +295,13 @@ y.telemetry<-as.matrix(woco.obs.matrix[,2:(dim(woco.state.matrix)[2])])
 z.telemetry<-as.matrix(woco.state.matrix[,2:(dim(woco.state.matrix)[2])])
 
 
+#### REMOVE individuals with no information (i.e. those that left or were shot before August in agiven year)
+noninfobirds<-which(apply(y.telemetry, 1, function(x) length(unique(x)) == 1) == TRUE)
+y.telemetry<-y.telemetry[-noninfobirds,]
+z.telemetry<-z.telemetry[-noninfobirds,]
+woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
+woco.eff.matrix<-woco.eff.matrix[-noninfobirds,]
+
 #### PREPARE A MATRIX OF WEEKS
 nyears<-dim(woco_ch)[2]-1
 nweeks<-dim(y.telemetry)[2]
