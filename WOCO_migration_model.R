@@ -20,6 +20,7 @@ select<-dplyr::select
 library(coda)
 library(MCMCvis)
 library(nimble)
+library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 
 ## set root folder for project
@@ -29,7 +30,7 @@ setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 # Load data ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
 load("data/woco_mig_input.RData")
-
+nimbleOptions(allowDynamicIndexing = TRUE)
 
 
 
@@ -75,7 +76,7 @@ woco.mig.model<-nimbleCode({
       p.dead.out[i,t] <- mean.p.dead.out[year[i]] #+      ###
         
       logit(mig[i,t]) <- lm.mean +      ### intercept for mean survival
-          b.mig.week*(week[t])     ### survival dependent on season
+          b.mig.week*(week[t])     ### migration probability dependent on week
       
       logit(p.obs.in[i,t]) <- lpin.mean +      ### intercept for mean survival
         b.obs.effort*(effort[i,t]) +    ### observation dependent on effort in that week and year
@@ -210,6 +211,7 @@ woco.mig.model<-nimbleCode({
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 telemetry.constants <- list(f = f.telemetry,
                             effort = effort,  # must be same dimension as obs matrix
+                            week = seq(1:nweeks),
                             year = year,
                             tag = tag,
                             nind = nind,
@@ -219,8 +221,8 @@ telemetry.data <- list(y = y.telemetry)
 
 
 ### SPECIFY DIMENSIONS for arrays used with empty indices
-telemetry.dims <- list(ps = c(3, dim(y.telemetry)[1], dim(y.telemetry)[2], 4),
-                       po = c(3, dim(y.telemetry)[1], dim(y.telemetry)[2], 5))
+telemetry.dims <- list(ps = c(4, dim(y.telemetry)[1], dim(y.telemetry)[2], 4),
+                       po = c(4, dim(y.telemetry)[1], dim(y.telemetry)[2], 5))
 
 
 
@@ -236,12 +238,18 @@ parameters.telemetry <- c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week")
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
 
 # Missing values (NAs) or non-finite values were found in model variables: phi, b.phi.age, b.phi.mig, b.phi.feed, b.phi.sex, b.phi.FRA, b.phi.SUI, b.phi.ESP, p.obs, tag.fail, p.found.dead, ps, po, z, y, rep.states.
-smartInit1 <- list(z = ifelse(is.na(z.telemetry),1,z.telemetry),
-                   y = ifelse(is.na(y.telemetry),1,y.telemetry),
+smartInit1 <- list(z = z.telemetry,
+                  # z = ifelse(is.na(z.telemetry),1,z.telemetry),
+                  # y = ifelse(is.na(y.telemetry),1,y.telemetry),
+                  #  y = y.telemetry,
                    
-                   mean.phi = rep(0.995,nyears),
-                   mean.p.dead.in = rep(0.5,nyears),
-                   mean.p.dead.out = rep(0.2,nyears),
+                   mean.phi = runif(nyears,0.95,0.999),
+                   mean.p.dead.in = runif(nyears,0.2,0.9),
+                   mean.p.dead.out = runif(nyears,0,0.3),
+                   
+                   # phi = array(runif(nweeks*nind,0.95,0.999),dim=c(nind,nweeks)),
+                   # p.dead.in = array(runif(nweeks*nind,0.2,0.9),dim=c(nind,nweeks)),
+                   # p.dead.out = array(runif(nweeks*nind,0,0.3),dim=c(nind,nweeks)),
                    
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
                    mean.mig = 0.5,   # fairly uninformative prior for weekly survival probabilities
@@ -261,8 +269,8 @@ smartInit1 <- list(z = ifelse(is.na(z.telemetry),1,z.telemetry),
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 2000
-n.burnin <- 1000
+n.iter <- 200
+n.burnin <- 100
 n.chains <- 4
 
 
@@ -287,23 +295,33 @@ test$logProb_b.mig.week
 test$logProb_mean.phi
 test$b.obs.effort
 test$mean.phi
+test$phi[1:3,]
+y.telemetry[1:3,15:16]
+z.telemetry[1:3,15:16]
 test$logProb_y ### there should not be any -Inf in this matrix
-
+y.telemetry[17,15:18]
+z.telemetry[17,]
 
 
 
 ### FIT FULL MODEL TO ALL DATA ############################
 # RUN NIMBLE MODEL --------------------
 
+# MCMC settings
+# number of posterior samples per chain is n.iter - n.burnin
+n.iter <- 50000
+n.burnin <- 10000
+n.chains <- 4
+
 tic()
 ### this takes 40-50 mins for 20000 iterations and converges in that time
-woco_surv <- nimbleMCMC(code = surv.model,
+woco_surv <- nimbleMCMC(code = woco.mig.model,
                         constants=telemetry.constants,
                         data = telemetry.data,
                         inits = smartInit1,
                         dimensions=telemetry.dims,
                         monitors = parameters.telemetry,
-                        thin=3,
+                        thin=4,
                         niter = n.iter,
                         nburnin = n.burnin,
                         nchains = n.chains,
