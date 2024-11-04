@@ -76,7 +76,7 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
   group_by(id) %>%
   summarise(last=max(date)) %>%
   ggplot(aes(x=last)) +
-  geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),..PANEL..,sum)[..PANEL..]),binwidth=7)+                               
+  geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),after_stat(PANEL),sum)[after_stat(PANEL)]),binwidth=7)+                               
   scale_x_date(name="last obs in study area",date_breaks="1 week", date_labels="%d-%b")+
   labs(y="proportion of woodcocks") +
   theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -85,7 +85,7 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
         axis.title=element_text(size=18), 
         strip.text.x=element_text(size=18, color="black"), 
         strip.background=element_rect(fill="white", colour="black"))
-ggsave("output/prop_woodcock_per_week_rawdat.jpg", width=7, height=6)
+#ggsave("output/prop_woodcock_per_week_rawdat.jpg", width=7, height=6)
 
 
 
@@ -260,7 +260,7 @@ for(i in 1:nrow(woco.obs.matrix)){
 
   stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<5))
   if((stopcol+1)<dim(woco.obs.matrix)[2]){
-    if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-3} else {  ## birds that survived until next year are labelled to have been recorded outside study area
+    if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-2} else {  ## birds that survived until next year are labelled to have been recorded outside study area
       woco.obs.matrix[i,min((stopcol+2),dim(woco.obs.matrix)[2]):dim(woco.obs.matrix)[2]]<-5}
   }
 
