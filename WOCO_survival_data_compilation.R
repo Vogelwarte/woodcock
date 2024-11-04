@@ -4,6 +4,7 @@
 
 ## written by Steffen Oppel on 30 Oct 2024 to initiate analysis
 ## goal is to estimate WHEN birds depart so that hunters can be confident they don't shoot Swiss birds
+## federal regulation permits shooting from 15 Sept to 16 December
 
 ## QUESTIONS TO MURDY:
 # what does 'censor' mean? check with Michi if censoring necessary for migration
@@ -75,7 +76,7 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
   group_by(id) %>%
   summarise(last=max(date)) %>%
   ggplot(aes(x=last)) +
-  geom_histogram(aes(x=last,y=(..count..)/tapply(..count..,..PANEL..,sum)[..PANEL..]),binwidth=7)+                               
+  geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),..PANEL..,sum)[..PANEL..]),binwidth=7)+                               
   scale_x_date(name="last obs in study area",date_breaks="1 week", date_labels="%d-%b")+
   labs(y="proportion of woodcocks") +
   theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -223,6 +224,7 @@ effort_mat<- woco %>%
 woco.obs.matrix<-woco_ann_ch_obs %>% arrange(id)
 woco.state.matrix<-woco_ann_ch_true %>% arrange(id)
 tag<-as.data.frame(woco_tag_mat %>% arrange(id) %>% select(tag))[,1]
+woco.eff.matrix<-woco_ann_ch_obs %>% arrange(id)
 dim(woco.obs.matrix)
 length(tag)
 
@@ -237,6 +239,10 @@ for(i in 1:nrow(woco.obs.matrix)){
   ### extract ind and year
   yr<-separate_wider_delim(woco_ann_ch_obs[i,],cols="id",delim="_", names=c('ring','year'))$year
   rn<-separate_wider_delim(woco_ann_ch_obs[i,],cols="id",delim="_", names=c('ring','year'))$ring
+  
+  ### add effort to individual matrix (because nimble does not allow dynamic indexing)
+  woco.eff.matrix[i,2:dim(woco.obs.matrix)[2]]<-effort_mat[effort_mat$year==yr,2:dim(woco.obs.matrix)[2]]
+  woco.eff.matrix[i,dim(woco.obs.matrix)[2]]<-sum(effort_mat[effort_mat$year==yr,2:20])  ### effort for following year is the sum across many months
   
   ### extract start and end dates for selected bird
   daterange<-woco %>%
@@ -255,14 +261,14 @@ for(i in 1:nrow(woco.obs.matrix)){
   stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<5))
   if((stopcol+1)<dim(woco.obs.matrix)[2]){
     if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-3} else {  ## birds that survived until next year are labelled to have been recorded outside study area
-      woco.obs.matrix[i,(stopcol+2):dim(woco.obs.matrix)[2]]<-5}
+      woco.obs.matrix[i,min((stopcol+2),dim(woco.obs.matrix)[2]):dim(woco.obs.matrix)[2]]<-5}
   }
 
   
   ### ENSURE THAT DEAD BIRDS STAY DEAD
   if(TRUE %in% (c(3,4) %in% woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]])){
     deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(3,4)))
-    woco.obs.matrix[i,(deadcol+2):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,(deadcol+1)]  ## assign the same state as last observed for rest of time series
+    woco.obs.matrix[i,min((deadcol+2),dim(woco.obs.matrix)[2]):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,(deadcol+1)]  ## assign the same state as last observed for rest of time series
   }
 
   ## ASSIGN INITIAL TRUE STATE (to initialise z-matrix of model)
@@ -275,7 +281,7 @@ for(i in 1:nrow(woco.obs.matrix)){
     if(year(daterange$first)<yr) {woco.state.matrix[i,2:startcol]<-startstate} ## anything before first obs gets same state as first obs
   }
   if((stopcol+1)<dim(woco.state.matrix)[2]){
-    woco.state.matrix[i,(stopcol+2):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
+    woco.state.matrix[i,min((stopcol+2),dim(woco.state.matrix)[2]):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
   }
   if(year(daterange$last)>yr) {
     woco.state.matrix[i,dim(woco.state.matrix)[2]]<-3  ## last column is always alive outside study area if bird also recorded next year
@@ -295,7 +301,7 @@ nweeks<-dim(y.telemetry)[2]
 nind<-dim(y.telemetry)[1]
 week<-seq(1:nweeks)
 year<-as.numeric(as.factor(separate_wider_delim(woco_ann_ch_obs,cols="id",delim="_", names=c('ring','year'))$year))
-effort<-effort_mat[,-1]
+effort<-woco.eff.matrix[,-1]
 
 #### create vector of first marking and of last alive record
 get.first.telemetry<-function(x)min(which(!is.na(x)))
