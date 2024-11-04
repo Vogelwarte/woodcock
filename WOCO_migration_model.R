@@ -77,7 +77,7 @@ woco.mig.model<-nimbleCode({
           b.mig.week*(week[t])     ### survival dependent on season
       
       logit(p.obs.in[i,t]) <- lpin.mean +      ### intercept for mean survival
-        b.obs.effort*(effort[year[i],week[t]]) +    ### observation dependent on effort in that week and year
+        b.obs.effort*(effort[i,t]) +    ### observation dependent on effort in that week and year
         b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
       
       logit(p.obs.out[i,t]) <- lpout.mean +      ### intercept for mean survival
@@ -208,14 +208,13 @@ woco.mig.model<-nimbleCode({
 # Constants are values that do not change, e.g. vectors of known index values or the indices used to define for loops
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 telemetry.constants <- list(f = f.telemetry,
-                            #effort = effort,  # removed because dynamic indexing is not allowed
+                            effort = effort,  # must be same dimension as obs matrix
                             year = year,
                             tag = tag,
                             nind = nind,
                             nweeks=nweeks,
                             nyears = nyears)
-telemetry.data <- list(y = y.telemetry,
-                       effort = effort)
+telemetry.data <- list(y = y.telemetry)
 
 
 ### SPECIFY DIMENSIONS for arrays used with empty indices
@@ -283,9 +282,9 @@ configureMCMC(test) # check that the samplers used are ok - all RW samplers need
 
 
 # use test output as starting values or check where the NA comes from
-test$logProb_b.phi.age
+test$logProb_b.mig.week
 test$logProb_mean.phi
-test$b.phi.season
+test$b.obs.effort
 test$mean.phi
 test$logProb_y ### there should not be any -Inf in this matrix
 
