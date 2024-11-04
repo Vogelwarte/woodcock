@@ -280,9 +280,16 @@ for(i in 1:nrow(woco.obs.matrix)){
   if(startcol>1){
     if(year(daterange$first)<yr) {woco.state.matrix[i,2:startcol]<-startstate} ## anything before first obs gets same state as first obs
   }
+  
   if((stopcol+1)<dim(woco.state.matrix)[2]){
     woco.state.matrix[i,min((stopcol+2),dim(woco.state.matrix)[2]):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
   }
+  
+  if(stopcol>(startcol+1)){ ## only needed if there is a chance of intermediate gaps between start and stopcol
+    for(col in (startcol+1):stopcol) {
+    woco.state.matrix[i,col]<-ifelse(is.na(woco.state.matrix[i,col]),woco.state.matrix[i,col-1],woco.state.matrix[i,col]) ## anything inbetween the start and stop column gets the previous state unless it is known
+  }}
+  
   if(year(daterange$last)>yr) {
     woco.state.matrix[i,dim(woco.state.matrix)[2]]<-3  ## last column is always alive outside study area if bird also recorded next year
   }
