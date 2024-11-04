@@ -4,6 +4,7 @@
 
 ## written by Steffen Oppel on 30 Oct 2024 to initiate analysis
 ## goal is to estimate WHEN birds depart so that hunters can be confident they don't shoot Swiss birds
+## background: https://www.ffw.ch/de/news/waldschnepfe/
 
 # Clear workspace ---------------------------------------------------------
 
@@ -236,23 +237,23 @@ parameters.telemetry <- c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week")
 
 # Missing values (NAs) or non-finite values were found in model variables: phi, b.phi.age, b.phi.mig, b.phi.feed, b.phi.sex, b.phi.FRA, b.phi.SUI, b.phi.ESP, p.obs, tag.fail, p.found.dead, ps, po, z, y, rep.states.
 smartInit1 <- list(z = ifelse(is.na(z.telemetry),1,z.telemetry),
-                   y=ifelse(is.na(y.telemetry),1,y.telemetry),
+                   y = ifelse(is.na(y.telemetry),1,y.telemetry),
                    
                    mean.phi = rep(0.995,nyears),
-                   mean.p.dead.in<-rep(0.5,nyears),
-                   mean.p.dead.out<-rep(0.2,nyears),
+                   mean.p.dead.in = rep(0.5,nyears),
+                   mean.p.dead.out = rep(0.2,nyears),
                    
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
-                   mean.mig <- 0.5,   # fairly uninformative prior for weekly survival probabilities
+                   mean.mig = 0.5,   # fairly uninformative prior for weekly survival probabilities
 
                    #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
-                   mean.p.in <- 0.2,   # fairly uninformative prior for weekly detection probabilities
-                   mean.p.out <- 0.05,   # fairly uninformative prior for weekly detection probabilities
+                   mean.p.in = 0.2,   # fairly uninformative prior for weekly detection probabilities
+                   mean.p.out = 0.05,   # fairly uninformative prior for weekly detection probabilities
                    
                    #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
-                   b.mig.week <- 0.5,         # Prior for week effect on migration probability on logit scale - must be positive
-                   b.obs.effort <- 0.5,         # Prior for effort effect on observation probability on logit scale  - must be positive
-                   b.obs.tag <- 0.5         # Prior for tag effect on observation probability on logit scale  - must be positive 
+                   b.mig.week = 0.5,         # Prior for week effect on migration probability on logit scale - must be positive
+                   b.obs.effort = 0.5,         # Prior for effort effect on observation probability on logit scale  - must be positive
+                   b.obs.tag = 0.5         # Prior for tag effect on observation probability on logit scale  - must be positive 
                    
 )
 
