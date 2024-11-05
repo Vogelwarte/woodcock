@@ -314,7 +314,7 @@ n.burnin <- 10000
 n.chains <- 4
 
 tic()
-### this takes 40-50 mins for 20000 iterations and converges in that time
+### this takes 6300 sec (2 hrs) for 20000 iterations and converges in that time
 woco_surv <- nimbleMCMC(code = woco.mig.model,
                         constants=telemetry.constants,
                         data = telemetry.data,
@@ -330,7 +330,7 @@ woco_surv <- nimbleMCMC(code = woco.mig.model,
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_seasonal_survival_output_nimble.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
 #woco_surv<-readRDS("output/woco_seasonal_survival_output_nimble.rds")
 
 
@@ -341,7 +341,7 @@ saveRDS(woco_surv,"output/woco_seasonal_survival_output_nimble.rds")
 
 
 #### MODEL ASSESSMENT ####
-out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.phi","b.phi.age","b.phi.sex","b.phi.mig","b.phi.feed","b.phi.FRA","b.phi.SUI","b.phi.ESP")))
+out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -350,7 +350,7 @@ fwrite(out,"output/woco_telemetry_seasonal_surv_parm.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
-MCMCplot(woco_surv$samples, params=c("mean.phi","b.phi.age","b.phi.sex","b.phi.mig","b.phi.feed","b.phi.FRA","b.phi.SUI","b.phi.ESP"))
+MCMCplot(woco_surv$samples, params=c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week"))
 ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
 # ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates.jpg", height=11, width=8)
 
