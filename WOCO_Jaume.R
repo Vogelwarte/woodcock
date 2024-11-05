@@ -15,8 +15,9 @@
 #There were two individuals showing forbidden transitions (detected in Switzerland, then abroad, then again in Switzerland)
 #There were errors in the initial values for the latent state matrix z - I rewrote it
 
-#There is still an annoying error: the likelihood for the observations (matrix y) is still providing "Inf" values at some locations. Interestingly, these are just for some of the individuals first marked at t=1 (not all of them), and the loglikelihood issue is always at t = 2. I actually do not get what is going on, because there are some individuals first marked at t=1 and with similar capture histories for which the loglikelihood can be successfully computed. There is an "effort" covariate for detection probability, can this be generating this issue? See list of individuals with loglikelihood issues here:
+#Ongoing errors
 
+#There is still an annoying error: the likelihood for the observations (matrix y) is still providing "Inf" values at some locations. Interestingly, these are just for some of the individuals first marked at t=1 (not all of them), and the loglikelihood issue is always at t = 2. Interestingly, for individuals marked at = 1 and with covariate tag = 1, there is no error, but instead, for individuals with covariate tag = 0, there is an error. See a more detailed description in the code. 
 
 #warning: logProb of data node y[32, 2]: logProb is -Inf.
 #warning: logProb of data node y[66, 2]: logProb is -Inf.
