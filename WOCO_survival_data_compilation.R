@@ -14,6 +14,10 @@
 # what are age categories 1-8? EURING Code? Only needed if age affects departure or survival
 # annual variation in survival, detection, migration?
 
+## NEED TO DO:
+# weed out non-informative birds
+# overwrite short excursions outside of the study area
+
 
 # Clear workspace ---------------------------------------------------------
 
@@ -302,12 +306,18 @@ y.telemetry<-as.matrix(woco.obs.matrix[,2:(dim(woco.state.matrix)[2])])
 z.telemetry<-as.matrix(woco.state.matrix[,2:(dim(woco.state.matrix)[2])])
 
 
-#### REMOVE individuals with no information (i.e. those that left or were shot before August in agiven year)
+#### REMOVE individuals with no information (i.e. those that left or were shot before August in a given year)
 noninfobirds<-which(apply(y.telemetry, 1, function(x) length(unique(x)) == 1) == TRUE)
 y.telemetry<-y.telemetry[-noninfobirds,]
 z.telemetry<-z.telemetry[-noninfobirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
 woco.eff.matrix<-woco.eff.matrix[-noninfobirds,]
+
+UKbirds<-which(apply(y.telemetry, 1, function(x) 1 %in% unique(x)) == TRUE)
+y.telemetry<-y.telemetry[UKbirds,]
+z.telemetry<-z.telemetry[UKbirds,]
+woco_ann_ch_obs<-woco_ann_ch_obs[UKbirds,]
+woco.eff.matrix<-woco.eff.matrix[UKbirds,]
 
 #### PREPARE A MATRIX OF WEEKS
 nyears<-dim(woco_ch)[2]-1
