@@ -327,6 +327,7 @@ y.telemetry<-y.telemetry[-noninfobirds,]
 z.telemetry<-z.telemetry[-noninfobirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
 woco.eff.matrix<-woco.eff.matrix[-noninfobirds,]
+tag<-tag[-noninfobirds]
 
 #### RETAIN ONLY individuals that were once seen alive in study area (all others have no value for estimating WHEN live birds leave study area)
 UKbirds<-which(apply(y.telemetry, 1, function(x) 1 %in% unique(x)) == TRUE)
@@ -334,6 +335,7 @@ y.telemetry<-y.telemetry[UKbirds,]
 z.telemetry<-z.telemetry[UKbirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[UKbirds,]
 woco.eff.matrix<-woco.eff.matrix[UKbirds,]
+tag<-tag[UKbirds]
 
 #### PREPARE A MATRIX OF WEEKS
 nyears<-dim(woco_ch)[2]-1
