@@ -34,6 +34,54 @@ nimbleOptions(allowDynamicIndexing = TRUE)
 
 
 
+## ADJUST INPUT DATA (Jaume Badia Boher)
+
+# remove NAs in the encounter histories to remove the number of NAs when assembling the model with nimbleModel, and will make error tracing easier.
+
+for(i in 1:nrow(y.telemetry)){
+  
+  if(f.telemetry[i] > 1){
+    
+    y.telemetry[i, 1:(f.telemetry[i]-1)] <- 5
+    
+  }
+  
+}
+
+# add an absorbing state to the model (long dead)
+# probably more correct because otherwise a dead observation is always under the estimation of a recovery probability
+# Thus, recode the observation and state matrix
+
+ww3 <- which(y.telemetry == 3, arr.ind = T)
+
+for(i in 1:nrow(ww3)){
+  
+  if(ww3[i,2] != nweeks){
+    
+    y.telemetry[ww3[i,1], (ww3[i,2] + 1):nweeks] <- 5 ## state 5 for not observed
+    z.telemetry[ww3[i,1], (ww3[i,2] + 1):nweeks] <- 5 ## state 5 for long dead
+    
+  }
+  
+}
+
+ww4 <- which(y.telemetry == 4, arr.ind = T)
+
+for(i in 1:nrow(ww4)){
+  
+  if(ww4[i,2] != nweeks){
+    
+    y.telemetry[ww4[i,1], (ww4[i,2] + 1):nweeks] <- 5 ## state 5 for not observed
+    z.telemetry[ww4[i,1], (ww4[i,2] + 1):nweeks] <- 5 ## state 5 for long dead
+    
+  }
+  
+}
+
+
+
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # SETTING UP NIMBLE CODE FOR SURVIVAL MODEL ---------------
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -55,6 +103,7 @@ woco.mig.model<-nimbleCode({
   # 2 dead in study area
   # 3 alive outside study area (after migration)
   # 4 dead outside study area (shot after after migration)
+  # 5 absorbing state / long-dead
   
   # Observed States (O) - these are based on the actual transmission history
   # 1 Bird (re)captured alive or recorded via transmitter in study area
@@ -74,9 +123,9 @@ woco.mig.model<-nimbleCode({
       phi[i,t] <- mean.phi[year[i]] #+      ###
       p.dead.in[i,t] <- mean.p.dead.in[year[i]] #+      ###
       p.dead.out[i,t] <- mean.p.dead.out[year[i]] #+      ###
-        
+      
       logit(mig[i,t]) <- lm.mean +      ### intercept for mean survival
-          b.mig.week*(week[t])     ### migration probability dependent on week
+        b.mig.week*(week[t])     ### migration probability dependent on week
       
       logit(p.obs.in[i,t]) <- lpin.mean +      ### intercept for mean survival
         b.obs.effort*(effort[i,t]) +    ### observation dependent on effort in that week and year
@@ -84,7 +133,7 @@ woco.mig.model<-nimbleCode({
       
       logit(p.obs.out[i,t]) <- lpout.mean +      ### intercept for mean survival
         b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
-
+      
     } #t
   } #i
   
@@ -121,7 +170,7 @@ woco.mig.model<-nimbleCode({
   # } #i
   
   
-
+  
   # -------------------------------------------------
   # Define state-transition and observation matrices 
   # -------------------------------------------------
@@ -136,21 +185,33 @@ woco.mig.model<-nimbleCode({
       ps[1,i,t,2]<-(1-phi[i,t])*(1-mig[i,t])
       ps[1,i,t,3]<-phi[i,t]*mig[i,t]
       ps[1,i,t,4]<-(1-phi[i,t])*mig[i,t]
+      ps[1,i,t,5] <- 0
       
       ps[2,i,t,1]<-0
-      ps[2,i,t,2]<-1
+      ps[2,i,t,2]<-0
       ps[2,i,t,3]<-0
       ps[2,i,t,4]<-0
+      ps[2,i,t,5]<-1
       
       ps[3,i,t,1]<-0
       ps[3,i,t,2]<-0
       ps[3,i,t,3]<-phi[i,t]
       ps[3,i,t,4]<-(1-phi[i,t])
+      ps[3,i,t,5] <- 0
       
       ps[4,i,t,1]<-0
       ps[4,i,t,2]<-0
       ps[4,i,t,3]<-0
-      ps[4,i,t,4]<-1
+      ps[4,i,t,4]<-0
+      ps[4,i,t,5] <- 1
+      
+      #Add an absorbing state, otherwise the recovery probability is applied all over and over I think
+      
+      ps[5,i,t,1] <- 0
+      ps[5,i,t,2] <- 0
+      ps[5,i,t,3] <- 0
+      ps[5,i,t,4] <- 0
+      ps[5,i,t,5] <- 1 #Probability (dead to remain dead)
       
       # Define probabilities of O(t) [last dim] given S(t)  [first dim]
       
@@ -178,23 +239,30 @@ woco.mig.model<-nimbleCode({
       po[4,i,t,4]<-p.dead.out[i,t]
       po[4,i,t,5]<-(1-p.dead.out[i,t])
       
+      #Add match event - absorbing state: long-dead individuals will always be unobservable with prob. 1
+      
+      po[5,i,t,1] <- 0
+      po[5,i,t,2] <- 0
+      po[5,i,t,3] <- 0
+      po[5,i,t,4] <- 0
+      po[5,i,t,5] <- 1
+      
     } #t
   } #i
   
   # Likelihood 
   for (i in 1:nind){
     # Define latent state at first capture
-    z[i,f[i]] <- 1 ## alive when first marked
+    z[i,f[i]] <- 1 ## alive in study area on first record - all other individuals and observations should have been eliminated because they are not relevant to the model
     for (t in (f[i]+1):nweeks){
       # State process: draw S(t) given S(t-1)
-      z[i,t] ~ dcat(ps[z[i,t-1], i, t-1,1:4])     ### check different CJS distribution in nimbleEcology dcjs
+      z[i,t] ~ dcat(ps[z[i,t-1], i, t-1,1:5])     ### check different CJS distribution in nimbleEcology dcjs
       # Observation process: draw O(t) given S(t)
       y[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])
       rep.states[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])    ## include this as goodness of fit measure
     } #t
   } #i
 }) ## end of nimble code chunk
-
 
 
 
@@ -221,8 +289,8 @@ telemetry.data <- list(y = y.telemetry)
 
 
 ### SPECIFY DIMENSIONS for arrays used with empty indices
-telemetry.dims <- list(ps = c(4, dim(y.telemetry)[1], dim(y.telemetry)[2], 4),
-                       po = c(4, dim(y.telemetry)[1], dim(y.telemetry)[2], 5))
+telemetry.dims <- list(ps = c(5, dim(y.telemetry)[1], dim(y.telemetry)[2], 5),
+                       po = c(5, dim(y.telemetry)[1], dim(y.telemetry)[2], 5))
 
 
 
@@ -309,8 +377,8 @@ z.telemetry[17,]
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 50000
-n.burnin <- 10000
+n.iter <- 10000
+n.burnin <- 5000
 n.chains <- 4
 
 tic()
