@@ -274,6 +274,16 @@ for(i in 1:nrow(woco.obs.matrix)){
     deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(3,4)))
     woco.obs.matrix[i,min((deadcol+2),dim(woco.obs.matrix)[2]):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,(deadcol+1)]  ## assign the same state as last observed for rest of time series
   }
+  
+  ### ENSURE THAT LOCAL BIRDS STAY LOCAL
+  ## there are very few 'excursions' out of the study area, but we do not want to model those, so we eliminate any state other than 1 prior to or between states of 1
+  startcolIN<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<5))
+  stopcolIN<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]==1))
+  if(stopcolIN>startcolIN){
+    for(col in (startcolIN+1):(stopcolIN+1)) {
+      if(!is.na(woco.obs.matrix[i,col])){woco.obs.matrix[i,col]<-ifelse(woco.obs.matrix[i,col]==5,5,1)}  ## assign everything to 1 except the not observed state
+    }
+  }
 
   ## ASSIGN INITIAL TRUE STATE (to initialise z-matrix of model)
   ### this needs careful manipulation to appropriately configure intermediate 0s
@@ -297,6 +307,11 @@ for(i in 1:nrow(woco.obs.matrix)){
   if(year(daterange$last)>yr) {
     woco.state.matrix[i,dim(woco.state.matrix)[2]]<-3  ## last column is always alive outside study area if bird also recorded next year
   }
+  if(stopcolIN>startcolIN){
+    for(col in (startcolIN+1):(stopcolIN+1)) {
+      woco.state.matrix[i,col]<-1  ## assign everything to 1 for true state
+    }
+  }
 }
 
 
@@ -313,6 +328,7 @@ z.telemetry<-z.telemetry[-noninfobirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
 woco.eff.matrix<-woco.eff.matrix[-noninfobirds,]
 
+#### RETAIN ONLY individuals that were once seen alive in study area (all others have no value for estimating WHEN live birds leave study area)
 UKbirds<-which(apply(y.telemetry, 1, function(x) 1 %in% unique(x)) == TRUE)
 y.telemetry<-y.telemetry[UKbirds,]
 z.telemetry<-z.telemetry[UKbirds,]
