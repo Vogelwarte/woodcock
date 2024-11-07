@@ -159,9 +159,9 @@ woco.mig.model<-nimbleCode({
   lpout.mean <- log(mean.p.out/(1 - mean.p.out))    # logit transformed detection intercept
   
   #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
-  b.mig.week ~ dunif(0,2)         # Prior for week effect on migration probability on logit scale - must be positive
-  b.obs.effort ~ dunif(0, 2)         # Prior for effort effect on observation probability on logit scale  - must be positive
-  b.obs.tag ~ dunif(0, 2)         # Prior for tag effect on observation probability on logit scale  - must be positive 
+  b.mig.week ~ dnorm(1,sd=2)         # Prior for week effect on migration probability on logit scale - must be positive
+  b.obs.effort ~ dnorm(1, sd=2)         # Prior for effort effect on observation probability on logit scale  - must be positive
+  b.obs.tag ~ dnorm(1, sd=2)         # Prior for tag effect on observation probability on logit scale  - must be positive 
   
   # #### DEAD RECOVERY PROBABILITY VARIES BY INDIVIDUAL
   # for (i in 1:nind){
@@ -320,7 +320,7 @@ smartInit1 <- list(z = z.telemetry,
                    # p.dead.out = array(runif(nweeks*nind,0,0.3),dim=c(nind,nweeks)),
                    
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
-                   mean.mig = 0.5,   # fairly uninformative prior for weekly survival probabilities
+                   mean.mig = 0.5,   # fairly uninformative prior for weekly migration probabilities
 
                    #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
                    mean.p.in = 0.2,   # fairly uninformative prior for weekly detection probabilities
@@ -335,40 +335,40 @@ smartInit1 <- list(z = z.telemetry,
 
 
 
-# MCMC settings
-# number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 200
-n.burnin <- 100
-n.chains <- 4
-
-
-# PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
-test <- nimbleModel(code = woco.mig.model,
-                    constants=telemetry.constants,
-                    data = telemetry.data,
-                    inits = smartInit1,
-                    calculate=TRUE)
-
-### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
-test$initializeInfo()
-#help(modelInitialization)
-
-### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
-
-
-# use test output as starting values or check where the NA comes from
-test$logProb_b.mig.week
-test$logProb_mean.phi
-test$b.obs.effort
-test$mean.phi
-test$phi[1:3,]
-y.telemetry[1:3,15:16]
-z.telemetry[1:3,15:16]
-test$logProb_y ### there should not be any -Inf in this matrix
-y.telemetry[17,15:18]
-z.telemetry[17,]
+# # MCMC settings
+# # number of posterior samples per chain is n.iter - n.burnin
+# n.iter <- 200
+# n.burnin <- 100
+# n.chains <- 4
+# 
+# 
+# # PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
+# test <- nimbleModel(code = woco.mig.model,
+#                     constants=telemetry.constants,
+#                     data = telemetry.data,
+#                     inits = smartInit1,
+#                     calculate=TRUE)
+# 
+# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
+# test$initializeInfo()
+# #help(modelInitialization)
+# 
+# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
+# 
+# 
+# # use test output as starting values or check where the NA comes from
+# test$logProb_b.mig.week
+# test$logProb_mean.phi
+# test$b.obs.effort
+# test$mean.phi
+# test$phi[1:3,]
+# y.telemetry[1:3,15:16]
+# z.telemetry[1:3,15:16]
+# test$logProb_y ### there should not be any -Inf in this matrix
+# y.telemetry[17,15:18]
+# z.telemetry[17,]
 
 
 
@@ -377,8 +377,8 @@ z.telemetry[17,]
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 10000
-n.burnin <- 5000
+n.iter <- 20000
+n.burnin <- 10000
 n.chains <- 4
 
 tic()
@@ -452,7 +452,7 @@ chainsPlot(woco_surv$samples,
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-############ PRODUCE ANNUAL SURVIVAL OUTPUT GRAPH SHOWING DIFFERENCES BETWEEN MALES AND FEMALES  #############################
+############ ESTIMATE DEPARTURE TIME OF WOODCOCKS  #############################
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # ### PREPARE RAW MCMC OUTPUT
@@ -465,16 +465,7 @@ MCMCout<-rbind(woco_surv$samples[[1]],woco_surv$samples[[2]],woco_surv$samples[[
 ### SET UP ANNUAL TABLE FOR PLOTTING THE ANNUAL SURVIVAL GRAPH
 ## uses mig to also specify time in FRA and ESP
 
-AnnTab<-expand.grid(age=seq(1,6,0.5), sex=c(0,1), feed = c(0,1), mig=c(0,1)) %>%
-  #mutate(mig=0.5) %>% ### migration has such a weak effect that we don't include it - set to intermediate probability to migrate
-  mutate(scaleage=(age-attr(agescale, 'scaled:center'))/attr(agescale, 'scaled:scale')) %>%
-  mutate(season=ifelse(nchar(age)==3,"non-breeding","breeding")) %>%
-  mutate(SUI=ifelse(season=="breeding",1,
-                    ifelse(mig==0,1,0.2))) %>%
-  mutate(FRA=ifelse(season=="breeding",0,
-                    ifelse(mig==0,0,0.3))) %>%
-  mutate(ESP=ifelse(season=="breeding",0,
-                    ifelse(mig==0,0,0.5)))
+AnnTab<-data.frame(week = seq(1:nweeks))
 
 ### CALCULATE PREDICTED VALUE FOR EACH SAMPLE
 
@@ -484,17 +475,11 @@ for(s in 1:nrow(MCMCout)) {
   X<-  AnnTab %>%
     
     ##CALCULATE MONTHLY SURVIVAL
-    mutate(logit.surv=ifelse(season=="breeding",as.numeric(MCMCout[s,match("lp.mean[1]",parmcols)]),as.numeric(MCMCout[s,match("lp.mean[2]",parmcols)]))+
-             as.numeric(MCMCout[s,match("b.phi.age",parmcols)])*scaleage +
-             as.numeric(MCMCout[s,match("b.phi.mig",parmcols)])*mig +
-             as.numeric(MCMCout[s,match("b.phi.sex",parmcols)])*sex +
-             as.numeric(MCMCout[s,match("b.phi.feed",parmcols)])*feed*SUI +
-             as.numeric(MCMCout[s,match("b.phi.SUI",parmcols)])*SUI +
-             as.numeric(MCMCout[s,match("b.phi.FRA",parmcols)])*FRA +
-             as.numeric(MCMCout[s,match("b.phi.ESP",parmcols)])*ESP)  %>%
+    mutate(logit.mig=logit(as.numeric(MCMCout[s,match("mean.mig",parmcols)]))+
+             as.numeric(MCMCout[s,match("b.mig.week",parmcols)])*week)  %>%
     
     ##BACKTRANSFORM TO NORMAL SCALE
-    mutate(surv=plogis(logit.surv)) %>%
+    mutate(mig=plogis(logit.mig)) %>%
     mutate(simul=s)              
   
   MCMCpred<-rbind(MCMCpred,as.data.frame(X)) 
@@ -502,45 +487,75 @@ for(s in 1:nrow(MCMCout)) {
 
 ### CREATE PLOT
 
-FIGURE<-MCMCpred %>% rename(raw.surv=surv) %>% dplyr::select(-logit.surv,-simul,-scaleage) %>%
-  #gather(key="Country", value="time", -age,-sex,-feed,-raw.surv,-mig) %>%
-  #filter(time>0) %>%
-  mutate(age=as.integer(age)) %>% ## combine the two seasons into the same year
-  group_by(sex,feed,age,mig) %>%
-  summarise(surv=quantile(raw.surv,0.5),surv.lcl=quantile(raw.surv,0.025),surv.ucl=quantile(raw.surv,0.975)) %>%
-  mutate(feed=ifelse(feed==1,"depends on human food","avoids human feeding")) %>%
-  mutate(sex=ifelse(sex==1,"male","female")) %>%
-  mutate(mig=ifelse(mig==1,"migrant","resident")) %>%
-  
+FIGURE<-MCMCpred %>% rename(raw.mig=mig) %>%
+  group_by(week) %>%
+  summarise(mig=quantile(raw.mig,0.5),mig.lcl=quantile(raw.mig,0.025),mig.ucl=quantile(raw.mig,0.975)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
   
   ggplot()+
-  geom_ribbon(aes(x=age, ymin=surv.lcl, ymax=surv.ucl, fill=sex, linetype=feed), alpha=0.2) +   ##
-  geom_line(aes(x=age, y=surv, color=sex, linetype=feed),linewidth=1)+     ##
-  facet_wrap(~mig) +
+  geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
+  geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
   
   ## format axis ticks
-  scale_x_continuous(name="Age in years", limits=c(1,6), breaks=seq(1,6,1), labels=seq(1,6,1)) +
-  #scale_y_continuous(name="Monthly survival probability", limits=c(0.8,1), breaks=seq(0.,1,0.05)) +
-  labs(y="Annual survival probability",fill="Sex", colour="Sex", type="Feeding") +
-  scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
-  scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
+  scale_x_date(name="Week of the year", date_labels = "%b %d") +
+  scale_y_continuous(name="Probability to leave study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         axis.text.y=element_text(size=14, color="black"),
         axis.text.x=element_text(size=14, color="black"), 
         axis.title=element_text(size=18),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=16, color="black"),
-        legend.position=c(0.8,0.1), 
-        strip.text=element_text(size=18, color="black"), 
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE
 
 ggsave(plot=FIGURE,
-       filename="output/woco_seasonal_survival_mig.jpg", 
+       filename="output/woco_seasonal_mig.jpg", 
+       device="jpg",width=11, height=8)
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+############ CUMULATIVE FIGURE: PROP POPULATION THAT HAS DEPARTED
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+## first calculate what proportion of a population of 1000 birds has departed by a given date
+woco.mig<-MCMCpred %>% rename(raw.mig=mig) %>%
+  mutate(pop=1000, left=0, prop_mig=0)
+
+for(s in 1: max(woco.mig$simul)){
+  for(w in 1: nweeks){
+    woco.mig$left[woco.mig$week==w & woco.mig$simul==s]<-rbinom(1,
+                                                                woco.mig$pop[woco.mig$week==w & woco.mig$simul==s],
+                                                                woco.mig$raw.mig[woco.mig$week==w & woco.mig$simul==s])
+    woco.mig$prop_mig[woco.mig$week==w & woco.mig$simul==s]<-sum(woco.mig$left[woco.mig$week<=w & woco.mig$simul==s])/1000
+    woco.mig$pop[woco.mig$week==w+1 & woco.mig$simul==s]<-woco.mig$pop[woco.mig$week==w & woco.mig$simul==s]-
+                                                                woco.mig$left[woco.mig$week==w & woco.mig$simul==s]
+  }
+}
+
+FIGURE2<-woco.mig %>%
+  group_by(week) %>%
+  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  
+  ggplot()+
+  geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
+  geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
+  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen") +
+  
+  ## format axis ticks
+  scale_x_date(name="Week of the year", date_labels = "%b %d") +
+  scale_y_continuous(name="Cumulative proportion of woodcocks that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURE2
+
+ggsave(plot=FIGURE2,
+       filename="output/woco_cumulative_mig_prop.jpg", 
        device="jpg",width=11, height=8)
 
 
