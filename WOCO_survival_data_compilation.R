@@ -18,6 +18,8 @@
 # weed out non-informative birds
 # overwrite short excursions outside of the study area
 
+## UPDATED 2 JAN 2025 to include actual netting effort data (provided by Pierre Mollet)
+## used data for those occasions where available, and extrapolated remaining occasions based on linear regression with capture numbers
 
 # Clear workspace ---------------------------------------------------------
 
@@ -207,7 +209,21 @@ woco_tag_mat<- woco %>%
   summarise(tag=max(tag))
 
 
-### temporary matrix until Pierre can deliver true effort data
+### CREATE BLANK MATRICES TO HOLD INFORMATION ABOUT TRUE AND OBSERVED STATES ###
+
+woco.obs.matrix<-woco_ann_ch_obs %>% arrange(id)
+woco.state.matrix<-woco_ann_ch_true %>% arrange(id)
+tag<-as.data.frame(woco_tag_mat %>% arrange(id) %>% select(tag))[,1]
+woco.eff.matrix<-woco_ann_ch_obs %>% arrange(id)
+dim(woco.obs.matrix)
+length(tag)
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# CREATE EFFORT MATRIX BASED ON ACTUAL NETTING EFFORT
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+### full matrix of records to be used to calibrate effort data from netting
 effort_mat<- woco %>%
   mutate(year=year(Datum), week=week(Datum)) %>%
   mutate(week=ifelse(week<31,31,week)) %>%
@@ -221,16 +237,47 @@ effort_mat<- woco %>%
   spread(key=week,value=eff, fill=0) %>%
   mutate(wk54=2)  ## create blank column for records past the migration season
 
+### summary of actual netting effort 
+netting <- read_excel("data/Data_Aufwand_Nov2024.xlsx", sheet="Tabelle1") %>%
+  mutate(effort=(`Länge (m)`*`Dauer (min)`)/60) %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(week=ifelse(week<31,31,week)) %>%
+  filter(week>30) %>%
+  mutate(week=paste0('wk',week)) %>%
+  group_by(year,week) %>%
+  summarise(tot_eff=sum(effort))
+  
+### calibrate relationship between netting effort and number of records
+effort_mat %>% filter(year %in% c(2016,2017,2018)) %>%
+  gather(key="week", value="exp_eff",-year) %>%
+  left_join(netting, by=c("year","week")) %>%
+  filter(!is.na(tot_eff)) %>%
+  
+  ggplot(aes(x=tot_eff, y=exp_eff)) +
+  geom_point(aes(col=week),size=2.5) +
+  geom_smooth(method="lm") +
+  labs(x="Weekly net metre hours", y="Total N of woodcock captures in UG") +
+  theme(legend.position="none")
+
+## fit linear regression
+calib_dat<-effort_mat %>% filter(year %in% c(2016,2017,2018)) %>%
+  gather(key="week", value="exp_eff",-year) %>%
+  left_join(netting, by=c("year","week")) %>%
+  filter(!is.na(tot_eff))
+eff_pred<-lm(tot_eff~0+exp_eff, data=calib_dat) ## forced through origin
 
 
-### CREATE BLANK MATRICES TO HOLD INFORMATION ABOUT TRUE AND OBSERVED STATES ###
-
-woco.obs.matrix<-woco_ann_ch_obs %>% arrange(id)
-woco.state.matrix<-woco_ann_ch_true %>% arrange(id)
-tag<-as.data.frame(woco_tag_mat %>% arrange(id) %>% select(tag))[,1]
-woco.eff.matrix<-woco_ann_ch_obs %>% arrange(id)
-dim(woco.obs.matrix)
-length(tag)
+## interpolate all occassions without actual netting effort data
+effort<-effort_mat %>%
+  gather(key="week", value="exp_eff",-year) %>%
+  ungroup() %>%
+  left_join(netting, by=c("year","week"))
+effort$pred_eff<-predict(eff_pred, newdat=effort) ## predict effort based on linear model
+effort_mat<-effort %>%
+  mutate(eff=ifelse(is.na(tot_eff),pred_eff,tot_eff)) %>% ## use the predicted effort for occasions when no actual effort is available
+  mutate(scale_eff=scale(eff)) %>%
+  select(year,week,scale_eff) %>%
+  spread(key=week,value=scale_eff)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
