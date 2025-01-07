@@ -6,6 +6,8 @@
 ## goal is to estimate WHEN birds depart so that hunters can be confident they don't shoot Swiss birds
 ## background: https://www.ffw.ch/de/news/waldschnepfe/
 
+## for reporting: estimate proportion that has departed at time when hunting season opens
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -34,7 +36,7 @@ nimbleOptions(allowDynamicIndexing = TRUE)
 
 
 
-## ADJUST INPUT DATA (Jaume Badia Boher)
+## ADJUST INPUT DATA (provided by Jaume Badia Boher)
 
 # remove NAs in the encounter histories to remove the number of NAs when assembling the model with nimbleModel, and will make error tracing easier.
 
@@ -102,7 +104,7 @@ woco.mig.model<-nimbleCode({
   # 1 alive in study area
   # 2 dead in study area
   # 3 alive outside study area (after migration)
-  # 4 dead outside study area (shot after after migration)
+  # 4 dead outside study area (shot after migration)
   # 5 absorbing state / long-dead
   
   # Observed States (O) - these are based on the actual transmission history
@@ -377,12 +379,12 @@ smartInit1 <- list(z = z.telemetry,
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 20000
-n.burnin <- 10000
+n.iter <- 50000
+n.burnin <- 25000
 n.chains <- 4
 
 tic()
-### this takes 6300 sec (2 hrs) for 20000 iterations and converges in that time
+### this takes 4000 sec (2 hrs) for 20000 iterations and converges in that time
 woco_surv <- nimbleMCMC(code = woco.mig.model,
                         constants=telemetry.constants,
                         data = telemetry.data,
@@ -424,11 +426,7 @@ ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=
 
 ## look at the chains and whether they mixed well
 chainsPlot(woco_surv$samples,
-           var=c("base.obs","base.fail","base.recover","b.recover.year","b.obs.FRA","b.obs.SUI"
-           ))
-chainsPlot(woco_surv$samples,
-           var=c("mean.phi","lp.mean",
-                 "b.phi.age","b.phi.sex","b.phi.mig","b.phi.feed","b.phi.FRA","b.phi.SUI","b.phi.ESP","b.phi.season"
+           var=c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week"
            ))
 
 
@@ -463,12 +461,9 @@ MCMCout<-rbind(woco_surv$samples[[1]],woco_surv$samples[[2]],woco_surv$samples[[
 # str(MCMCout)
 
 ### SET UP ANNUAL TABLE FOR PLOTTING THE ANNUAL SURVIVAL GRAPH
-## uses mig to also specify time in FRA and ESP
-
 AnnTab<-data.frame(week = seq(1:nweeks))
 
 ### CALCULATE PREDICTED VALUE FOR EACH SAMPLE
-
 MCMCpred<-data.frame()
 for(s in 1:nrow(MCMCout)) {
   
@@ -532,7 +527,23 @@ for(s in 1: max(woco.mig$simul)){
   }
 }
 
-FIGURE2<-woco.mig %>%
+saveRDS(woco_mig,"output/woco_mig_depart_simulation.rds")
+#woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
+
+
+
+# LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
+require(png)
+library(grid)
+library(gtable)
+require(jpeg)
+library(magick)
+imgGun<-readPNG("manuscript/rifleicon.png")
+gunicon <- rasterGrob(imgGun, interpolate=TRUE)
+imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
+wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
+
+FIGURE2<-woco.mig %>% 
   group_by(week) %>%
   summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
   mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
@@ -540,10 +551,24 @@ FIGURE2<-woco.mig %>%
   ggplot()+
   geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
   geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
-  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen") +
+  
+  ### add vertical lines to specify key dates
+  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
+  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey18", linewidth=2) +
+  geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
+  geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
+  geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
+  
+  
+  ### add the bird icons
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
+  
   
   ## format axis ticks
-  scale_x_date(name="Week of the year", date_labels = "%b %d") +
+  scale_x_date(name="Week of the year", date_labels = "%d %b") +
   scale_y_continuous(name="Cumulative proportion of woodcocks that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
   
   ## beautification of the axes
@@ -561,3 +586,24 @@ ggsave(plot=FIGURE2,
 
 
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+############ CALCULATE PROP POPULATION THAT HAS DEPARTED BY CERAIN DATES -------
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## Nationale Ebene 15 September: https://www.fedlex.admin.ch/eli/cc/1988/506_506_506/de
+# Kanton BE und VS 1 Okt
+# Kanton FR, TI, and VD 15 Okt
+# Kanton JU und NE 15 Sept
+
+# most woodcock are shot between 15 Oct and 15 Nov, so include 15 Nov as well
+
+OUTPUT<-woco.mig %>%
+  group_by(week) %>%
+  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
+  mutate(rem=1-mig,rem.lcl=1-mig.lcl,rem.ucl=1-mig.ucl) %>%
+  mutate(WeekStartDate=lubridate::ymd("2024-07-28") + lubridate::weeks(week - 1)) %>%
+  filter(week %in% c(8,10,12,17)) %>%
+  mutate(Percent_departed=paste(round(mig*100,1)," (",round(mig.lcl*100,1)," - ",round(mig.ucl*100,1),")", sep="")) %>%
+  mutate(Percent_remaining=paste(round(rem*100,1)," (",round(rem.lcl*100,1)," - ",round(rem.ucl*100,1),")", sep="")) %>%
+  select(WeekStartDate,Percent_departed,Percent_remaining)
+
+fwrite(OUTPUT,"output/WOCO_prop_departed_key_hunting_dates.csv")
