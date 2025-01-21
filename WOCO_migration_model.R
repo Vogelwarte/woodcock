@@ -12,11 +12,13 @@
 
 rm(list=ls()) 
 Sys.setenv(LANG = "en") ##change language of error messages to english
-
+# install.packages(c('tictoc','coda','MCMCvis','basicMCMCplots','lubridate','tidyverse','dplyr','data.table','png','magick','jpeg','grid','gtable','igraph', 'coda', 'R6', 'pracma', 'numDeriv'), dependencies=T)
+# install.packages('nimble', dependencies=T)
 # Load libraries, functions etc -------------------------------------------
 library(lubridate)
 library(tidyverse)
 library(dplyr)
+library(data.table)
 filter<-dplyr::filter
 select<-dplyr::select
 library(coda)
@@ -26,8 +28,17 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 
 ## set root folder for project
-setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
+#setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+setwd("C:/woodcock")  ## for HPC
+
+
+# ## set PATH environment for nimble
+# path <- Sys.getenv('PATH')
+# newPath <- paste("C:\\rtools44\\mingw32\\bin;C:\\rtools44\\mingw64\\bin;",
+#              path, sep = "")
+# Sys.setenv(PATH = newPath) 
+
 
 # Load data ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
@@ -126,15 +137,18 @@ woco.mig.model<-nimbleCode({
       p.dead.in[i,t] <- mean.p.dead.in[year[i]] #+      ###
       p.dead.out[i,t] <- mean.p.dead.out[year[i]] #+      ###
       
-      logit(mig[i,t]) <- lm.mean +      ### intercept for mean survival
+      logit.mig[i,t] <- lm.mean +      ### intercept for mean survival
         b.mig.week*(week[t])     ### migration probability dependent on week
+      mig[i,t] <-ilogit(logit.mig[i,t])
       
-      logit(p.obs.in[i,t]) <- lpin.mean +      ### intercept for mean survival
+      logit.p.obs.in[i,t] <- lpin.mean +      ### intercept for mean survival
         b.obs.effort*(effort[i,t]) +    ### observation dependent on effort in that week and year
         b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
+      p.obs.in[i,t] <-ilogit(logit.p.obs.in[i,t])
       
-      logit(p.obs.out[i,t]) <- lpout.mean +      ### intercept for mean survival
+      logit.p.obs.out[i,t] <- lpout.mean +      ### intercept for mean survival
         b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
+      p.obs.out[i,t] <-ilogit(logit.p.obs.out[i,t])
       
     } #t
   } #i
@@ -150,7 +164,7 @@ woco.mig.model<-nimbleCode({
   }
   
   #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
-  mean.mig ~ dunif(0,1)   # fairly uninformative prior for weekly survival probabilities
+  mean.mig ~ dnorm(0,1)   # fairly uninformative prior for intercept of weekly departure probability
   lm.mean <- log(mean.mig/(1 - mean.mig))    # logit transformed migration intercept
   
   #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
@@ -261,7 +275,7 @@ woco.mig.model<-nimbleCode({
       z[i,t] ~ dcat(ps[z[i,t-1], i, t-1,1:5])     ### check different CJS distribution in nimbleEcology dcjs
       # Observation process: draw O(t) given S(t)
       y[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])
-      rep.states[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])    ## include this as goodness of fit measure
+      #rep.states[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])    ## include this as goodness of fit measure
     } #t
   } #i
 }) ## end of nimble code chunk
@@ -301,7 +315,7 @@ telemetry.dims <- list(ps = c(5, dim(y.telemetry)[1], dim(y.telemetry)[2], 5),
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Parameters monitored
-parameters.telemetry <- c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week")
+parameters.telemetry <- c("mean.mig","b.mig.week","mean.phi")
 
 # Initial values for some parameters
 ## MUST BE FOR ALL PARAMETERS
@@ -322,7 +336,7 @@ smartInit1 <- list(z = z.telemetry,
                    # p.dead.out = array(runif(nweeks*nind,0,0.3),dim=c(nind,nweeks)),
                    
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
-                   mean.mig = 0.5,   # fairly uninformative prior for weekly migration probabilities
+                   mean.mig = 0.1,   # fairly uninformative prior for weekly migration probabilities
 
                    #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
                    mean.p.in = 0.2,   # fairly uninformative prior for weekly detection probabilities
@@ -411,7 +425,7 @@ saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
 
 
 #### MODEL ASSESSMENT ####
-out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week")))
+out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -420,13 +434,13 @@ fwrite(out,"output/woco_telemetry_seasonal_surv_parm.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
-MCMCplot(woco_surv$samples, params=c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week"))
+MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi"))
 ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
 # ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates.jpg", height=11, width=8)
 
 ## look at the chains and whether they mixed well
 chainsPlot(woco_surv$samples,
-           var=c("mean.mig","b.obs.effort","b.obs.tag","b.mig.week"
+           var=c("mean.mig","b.mig.week"
            ))
 
 
@@ -527,7 +541,7 @@ for(s in 1: max(woco.mig$simul)){
   }
 }
 
-saveRDS(woco_mig,"output/woco_mig_depart_simulation.rds")
+saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
