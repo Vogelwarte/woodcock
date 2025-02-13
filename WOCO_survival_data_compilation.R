@@ -14,12 +14,11 @@
 # what are age categories 1-8? EURING Code? Only needed if age affects departure or survival
 # annual variation in survival, detection, migration?
 
-## NEED TO DO:
-# weed out non-informative birds
-# overwrite short excursions outside of the study area
-
 ## UPDATED 2 JAN 2025 to include actual netting effort data (provided by Pierre Mollet)
 ## used data for those occasions where available, and extrapolated remaining occasions based on linear regression with capture numbers
+
+## UPDATED 12 FEB 2025 to exclude ARGOS DATA (optional - because we are not sure about permissions)
+
 
 # Clear workspace ---------------------------------------------------------
 
@@ -41,6 +40,8 @@ setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 # Load data ---------------------------------------------------------------
 
 woco <- read_excel("data/Daten_Waldschnepfe.xlsx", sheet="Data") %>%
+  # mutate(Sendertyp=ifelse(is.na(Sendertyp),"none",Sendertyp)) %>%  ## fill in missing values for type of transmitter
+  # dplyr::filter(Sendertyp!="ARGOS") %>%  ## optionally remove all ARGOS data
   rename(age=`Alter (Euring)`)
 woco
 
@@ -400,4 +401,4 @@ l.telemetry<-apply(y.telemetry,1,get.last.telemetry)
 
 
 ############# SAVE  PREPARED DATA ----------
-save.image("data/woco_mig_input.RData")
+save.image("data/woco_mig_input_no_argos.RData")

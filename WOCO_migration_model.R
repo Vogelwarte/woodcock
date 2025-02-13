@@ -8,6 +8,8 @@
 
 ## for reporting: estimate proportion that has departed at time when hunting season opens
 
+## update on 7 Feb 2025: analysed data without ARGOS
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -42,7 +44,7 @@ setwd("C:/woodcock")  ## for HPC
 
 # Load data ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
-load("data/woco_mig_input.RData")
+load("data/woco_mig_input_no_argos.RData")  ## option to remove _no_argos for full dataset
 nimbleOptions(allowDynamicIndexing = TRUE)
 
 
@@ -414,7 +416,7 @@ woco_surv <- nimbleMCMC(code = woco.mig.model,
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_nimble_no_argos.rds")
 #woco_surv<-readRDS("output/woco_seasonal_survival_output_nimble.rds")
 
 
@@ -430,13 +432,13 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_telemetry_seasonal_surv_parm.csv")
+fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
 MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi"))
 ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
-# ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates.jpg", height=11, width=8)
+# ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates_no_argos.jpg", height=11, width=8)
 
 ## look at the chains and whether they mixed well
 chainsPlot(woco_surv$samples,
@@ -518,7 +520,7 @@ FIGURE<-MCMCpred %>% rename(raw.mig=mig) %>%
 FIGURE
 
 ggsave(plot=FIGURE,
-       filename="output/woco_seasonal_mig.jpg", 
+       filename="output/woco_seasonal_mig_no_argos.jpg", 
        device="jpg",width=11, height=8)
 
 
@@ -541,7 +543,7 @@ for(s in 1: max(woco.mig$simul)){
   }
 }
 
-saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
+saveRDS(woco.mig,"output/woco_mig_depart_simulation_no_argos.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
@@ -594,7 +596,7 @@ FIGURE2<-woco.mig %>%
 FIGURE2
 
 ggsave(plot=FIGURE2,
-       filename="output/woco_cumulative_mig_prop.jpg", 
+       filename="output/woco_cumulative_mig_prop_no_argos.jpg", 
        device="jpg",width=11, height=8)
 
 
@@ -620,4 +622,4 @@ OUTPUT<-woco.mig %>%
   mutate(Percent_remaining=paste(round(rem*100,1)," (",round(rem.lcl*100,1)," - ",round(rem.ucl*100,1),")", sep="")) %>%
   select(WeekStartDate,Percent_departed,Percent_remaining)
 
-fwrite(OUTPUT,"output/WOCO_prop_departed_key_hunting_dates.csv")
+fwrite(OUTPUT,"output/WOCO_prop_departed_key_hunting_dates_no_argos.csv")
