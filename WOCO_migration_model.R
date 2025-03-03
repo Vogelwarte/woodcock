@@ -154,15 +154,20 @@ woco.mig.model<-nimbleCode({
   #### WEEKLY SURVIVAL, MIGRATION and DETECTION PROBABILITIES
   for (i in 1:nind){
     for (t in f[i]:(nweeks)){
-      phi[i,t] <- mean.phi[year[i]] #+      ###
+      #phi[i,t] <- mean.phi[year[i]] #+      ###
       p.dead.in[i,t] <- mean.p.dead.in[year[i]] #+      ###
       p.dead.out[i,t] <- mean.p.dead.out[year[i]] #+      ###
       
-      logit.mig[i,t] <- lm.mean +      ### intercept for mean survival
+      logit.phi[i,t] <- lm.phi[year[i]] +      ### intercept for mean migration
+        b.phi.week*(week[t]) +     ### survival probability dependent on week
+        b2.phi.week*(pow(week[t],2))     ### quadratic effect to mimic hunting season
+      phi[i,t] <-ilogit(logit.phi[i,t])
+      
+      logit.mig[i,t] <- lm.mean +      ### intercept for mean migration
         b.mig.week*(week[t])     ### migration probability dependent on week
       mig[i,t] <-ilogit(logit.mig[i,t])
       
-      logit.p.obs.in[i,t] <- lpin.mean +      ### intercept for mean survival
+      logit.p.obs.in[i,t] <- lpin.mean +      ### intercept for mean detection probability
         b.obs.effort*(effort[i,t]) +    ### observation dependent on effort in that week and year
         b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
       p.obs.in[i,t] <-ilogit(logit.p.obs.in[i,t])
@@ -177,7 +182,7 @@ woco.mig.model<-nimbleCode({
   #### BASELINE FOR SURVIVAL PROBABILITY (varies by year)
   for(s in 1:nyears) {
     mean.phi[s] ~ dunif(0.9,1)   # fairly uninformative prior for weekly survival probabilities
-    #lp.mean[s] <- log(mean.phi[s]/(1 - mean.phi[s]))    # logit transformed survival intercept
+    lm.phi[s] <- log(mean.phi[s]/(1 - mean.phi[s]))    # logit transformed survival intercept
     
     #### DEAD RECOVERY PROBABILITY VARIES BY YEAR
     mean.p.dead.in[s] ~ dunif(0,1)
@@ -197,6 +202,8 @@ woco.mig.model<-nimbleCode({
   
   #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
   b.mig.week ~ dnorm(1,sd=2)         # Prior for week effect on migration probability on logit scale - must be positive
+  b.phi.week ~ dnorm(0,sd=1)         # Prior for week effect on survival probability on logit scale - must be positive
+  b2.phi.week ~ dnorm(0,sd=1)         # Prior for quadratic week effect on survival probability on logit scale - must be positive
   b.obs.effort ~ dnorm(1, sd=2)         # Prior for effort effect on observation probability on logit scale  - must be positive
   b.obs.tag ~ dnorm(1, sd=2)         # Prior for tag effect on observation probability on logit scale  - must be positive 
   
@@ -336,7 +343,7 @@ telemetry.dims <- list(ps = c(5, dim(y.telemetry)[1], dim(y.telemetry)[2], 5),
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Parameters monitored
-parameters.telemetry <- c("mean.mig","b.mig.week","mean.phi")
+parameters.telemetry <- c("mean.mig","b.mig.week","b.phi.week","b2.phi.week","mean.phi")
 
 # Initial values for some parameters
 ## MUST BE FOR ALL PARAMETERS
@@ -365,6 +372,8 @@ smartInit1 <- list(z = z.telemetry,
                    
                    #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
                    b.mig.week = 0.5,         # Prior for week effect on migration probability on logit scale - must be positive
+                  b.phi.week = 0,         # Prior for week effect on survival probability on logit scale - must be positive
+                  b2.phi.week = 0,         # Prior for quadratic week effect on survival probability on logit scale - must be positive
                    b.obs.effort = 0.5,         # Prior for effort effect on observation probability on logit scale  - must be positive
                    b.obs.tag = 0.5         # Prior for tag effect on observation probability on logit scale  - must be positive 
                    
@@ -446,17 +455,17 @@ saveRDS(woco_surv,"output/woco_mig_depart_output_nimble_no_argos.rds")
 
 
 #### MODEL ASSESSMENT ####
-out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi")))
+out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.mig.week","b.phi.week","b2.phi.week","mean.phi")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos.csv")
+fwrite(out,"output/woco_telemetry_seasonal_surv_parm_phi_week.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
-MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi"))
-ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
+MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","b.phi.week","b2.phi.week","mean.phi"))
+ggsave("output/woco_seasonal_survival_parameter_estimates_phi_week.jpg", height=9, width=9)
 # ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates_no_argos.jpg", height=11, width=8)
 
 ## look at the chains and whether they mixed well
