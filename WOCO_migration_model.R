@@ -30,9 +30,9 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 
 ## set root folder for project
-#setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
+setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
-setwd("C:/woodcock")  ## for HPC
+#setwd("C:/woodcock")  ## for HPC
 
 
 # ## set PATH environment for nimble
@@ -44,7 +44,7 @@ setwd("C:/woodcock")  ## for HPC
 
 # Load data ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
-load("data/woco_mig_input_no_argos.RData")  ## option to remove _no_argos for full dataset
+load("data/woco_mig_input.RData")  ## option to remove _no_argos for full dataset
 nimbleOptions(allowDynamicIndexing = TRUE)
 
 
@@ -92,6 +92,25 @@ for(i in 1:nrow(ww4)){
   }
   
 }
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+############ REPORTING RAW DATA FOR MANUSCRIPT
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# total number of marked birds
+length(unique(woco$Ring_num))
+
+# total number of monitored seasons
+nrow(y.telemetry)
+
+# total number dead
+length(unique(woco$Ring_num[woco$Beobachtung=="Totfund"]))
+
+# total number dead outsid
+length(unique(woco$Ring_num[woco$Beobachtung=="Totfund" & woco$Ort=="UG"]))
 
 
 
