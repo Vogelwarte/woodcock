@@ -435,8 +435,8 @@ woco_surv <- nimbleMCMC(code = woco.mig.model,
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_mig_depart_output_nimble_no_argos.rds")
-#woco_surv<-readRDS("output/woco_seasonal_survival_output_nimble.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
+#woco_surv<-readRDS("output/woco_mig_depart_output_nimble.rds")
 
 
 
@@ -453,6 +453,11 @@ names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 out
 fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
+
+
+#### CALCULATE APPROXIMATE ANNUAL SURVIVAL
+out %>% filter(startsWith(parameter,"mean.phi")) %>%
+  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52)
 
 
 MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi"))
@@ -622,7 +627,7 @@ ggsave(plot=FIGURE2,
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-############ CALCULATE PROP POPULATION THAT HAS DEPARTED BY CERAIN DATES -------
+############ CALCULATE PROP POPULATION THAT HAS DEPARTED BY CERTAIN DATES -------
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## Nationale Ebene 15 September: https://www.fedlex.admin.ch/eli/cc/1988/506_506_506/de
 # Kanton BE und VS 1 Okt
