@@ -50,6 +50,9 @@ po/*~
 rsconnect/
 
 # manuscripts and binary files
+manuscript/
+literature/
 .pdf
 .doc
 .docx
+.pptx
