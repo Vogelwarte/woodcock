@@ -213,9 +213,9 @@ ALL_OUT %>% filter(nonSwiss==1) %>% select(-Ntot) %>%
   ggplot(aes(x=shot_in,colour=age)) +
   geom_errorbar(aes(ymin=min, ymax=max)) +
   facet_wrap(~age, ncol=1) +
-  scale_y_continuous(limits=c(0,1)) +
-  
-  theme_classic()
+  scale_y_continuous(name="prop shot woodcock from abroad",limits=c(0,1)) +
+  theme_classic() +
+  theme(legend.position="none")
 
-
+ggsave("output/WOCO_prop_shot_origin.jpg", width=6, height=9)
 
