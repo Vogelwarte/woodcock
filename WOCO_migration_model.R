@@ -10,6 +10,8 @@
 
 ## update on 7 Feb 2025: analysed data without ARGOS
 
+## update on 16 May 2025: adjusted new hunting periods
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -567,7 +569,7 @@ for(s in 1: max(woco.mig$simul)){
   }
 }
 
-saveRDS(woco.mig,"output/woco_mig_depart_simulation_no_argos.rds")
+saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
@@ -592,7 +594,17 @@ FIGURE2<-woco.mig %>%
   geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
   geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
   
-  ### add vertical lines to specify key dates
+  # ### add vertical lines to specify key dates OF NEW (2024) HUNTING TIMES
+  # geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
+  # geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
+  # geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  # geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey18", linewidth=2) +
+  # geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
+  # geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
+  # geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
+  
+  
+  ### add vertical lines to specify key dates OF OLD HUNTING TIMES
   geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
   geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
   geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
@@ -629,10 +641,15 @@ ggsave(plot=FIGURE2,
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ############ CALCULATE PROP POPULATION THAT HAS DEPARTED BY CERTAIN DATES -------
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## Nationale Ebene 15 September: https://www.fedlex.admin.ch/eli/cc/1988/506_506_506/de
-# Kanton BE und VS 1 Okt
-# Kanton FR, TI, and VD 15 Okt
-# Kanton JU und NE 15 Sept
+## Nationale Ebene 16 September - 14 Dezember: https://www.fedlex.admin.ch/eli/cc/1988/506_506_506/de
+
+
+### the NEW TIMES ARE (updated from 2024 - different from 2017)
+# Kanton JU 15 Sept
+# Kanton BE 1 Okt
+# Kanton FR, VS, TI, and NE 20 Okt
+# Kanton VD 1 NOV
+
 
 # most woodcock are shot between 15 Oct and 15 Nov, so include 15 Nov as well
 
@@ -646,4 +663,4 @@ OUTPUT<-woco.mig %>%
   mutate(Percent_remaining=paste(round(rem*100,1)," (",round(rem.lcl*100,1)," - ",round(rem.ucl*100,1),")", sep="")) %>%
   select(WeekStartDate,Percent_departed,Percent_remaining)
 
-fwrite(OUTPUT,"output/WOCO_prop_departed_key_hunting_dates_no_argos.csv")
+fwrite(OUTPUT,"output/WOCO_prop_departed_key_hunting_dates.csv")
