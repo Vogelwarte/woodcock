@@ -10,7 +10,7 @@ library(data.table)
 library(dplyr)
 library(tidyverse)
 library(janitor)
-library(readxl)
+#library(readxl)
 library(assignR) ## https://cran.r-project.org/web/packages/assignR/vignettes/assignR.html
 # library(isocat) ## https://cran.r-project.org/web/packages/isocat/vignettes/isocat.html
 # library(isoAssign) ## https://rdrr.io/github/SMBC-NZP/MigConnectivity/man/isoAssign.html
@@ -22,12 +22,47 @@ library(terra)
 setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
 
-woco_n<-read_excel("output/IsotopeAssignment_Tables.xlsx", sheet="Table11_SampleSize")
-woco<-read_excel("output/IsotopeAssignment_Tables.xlsx", sheet="Table14_IsotopeAssignments_Hunt")
+
+
+# 1. READ IN PROCESSED ISOTOPE DATA ----
+
+woco<-fread("data/WOCO_isotopes.csv")
+#woco<-read_excel("output/IsotopeAssignment_Tables.xlsx", sheet="Table14_IsotopeAssignments_Hunt")
+
+
+## 1.1. SPLIT INTO KNOWN ORIGIN AND UNKNOWN ----
+
+ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH_reg,dH_scaled,dH_correct,PROVENANCE_voigt)
+UNK_WC<-woco %>% filter(ORIGINE=="UNBEKANNT") %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH_reg,dH_scaled,dH_correct,PROVENANCE_voigt)
 
 
 
-## 1. Feather fractionation from rainwater hydrogen isotope ----
+## 1.2. PLOT THE DIFFERENT d2H isotope values ----
+
+ggplot(woco, aes(x=dH_reg,y=dH_scaled, col=AGE)) +
+  geom_point() +
+  geom_smooth()
+
+
+ggplot(woco, aes(x=dH_reg,y=dH_correct, col=AGE)) +
+  geom_point() +
+  geom_smooth()
+
+
+
+## 1.3. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
+
+ggplot(woco, aes(x=dH_correct, col=ORIGINE, fill=ORIGINE)) +
+  geom_histogram(alpha=0.5,position = position_dodge(width=1)) 
+
+
+
+
+
+
+# 2. Feather fractionation from rainwater hydrogen isotope ----
 
 # converting isoscape rainfall values into feather d2H values
 # based on Powell 2022, Table 3.1, page 133 with a sample size of 135 feathers
