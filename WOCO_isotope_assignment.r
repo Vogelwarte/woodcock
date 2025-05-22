@@ -13,6 +13,11 @@
 
 
 
+
+## NEED TO DO: create PRIOR raster of isotope probability which is distributed according to distribution of Swiss isotope histogram - include forest layer to exclude Alpine areas
+
+
+
 library(data.table)
 library(dplyr)
 library(tidyverse)
@@ -73,7 +78,7 @@ ggplot(woco, aes(x=dH_correct, col=ORIGINE, fill=ORIGINE)) +
   geom_histogram(alpha=0.5,position = position_dodge(width=1)) 
 
 
-distd2H_knownSUI<-hist(ORIG_WC$dH_correct)
+distd2H_knownSUI<-hist(ORIG_WC$dH_correct, breaks=seq(-130,30,5))
 distd2H_knownSUI$density   ## this can be used as prior information for the isotope assignment
 
 
@@ -129,6 +134,7 @@ summary(lm(dH~dH_reg+AGE, data=ORIG_WC))
 # 3. Geographic assignment using assignR ----
 
 ## 3.1. load shapefile of Switzerland and EUROPE ----
+### NEED TO CURTAIL TO FOREST AREAS FROM WALD LAYER
 
 SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
   st_transform(st_crs('EPSG:4326')) # Project to WGS84
@@ -202,13 +208,43 @@ plot(isoscape.AD, xlab="Longitude", ylab="Latitude")
 
 
 
+## 3.5. PRIOR OF DISTRIBUTION  ----
+min(values(isoscape)[,1],na.rm=T)
+max(values(isoscape)[,1],na.rm=T)
+distd2H_knownSUI<-hist(ORIG_WC$dH_correct, breaks=seq(-135,-5,5))
+prior.probs<-tibble(d2H=distd2H_knownSUI$breaks[-1], prob=distd2H_knownSUI$density)
+prior.probs$prob[findInterval(x=woco$dH_correct, vec=prior.probs$d2H)]
+
+priorscape <- isoscape
+length(values(isoscape)[,1])
+length(values(priorscape)[,1])
+length(findInterval(x=values(isoscape)[,1], vec=prior.probs$d2H))
+values(priorscape)[,1]<-prior.probs$prob[findInterval(x=values(isoscape)[,1], vec=prior.probs$d2H)]
+values(priorscape)[,2]<-2  ## arbitrary value for se of prior probability
 
 
-## 3.5. ASSIGNMENT TO ORIGIN  ----
 
+
+## 3.6. ASSIGNMENT TO ORIGIN  ----
+## this is computationally very intensive!!
 ### because the isotope data are already converted into rainfall isotopes, we do not need the calibrated isoscape
-origins <- pdRaster(isoscape, UNK_WC[,c(1,9)], mask = as(EUR, 'Spatial'), genplot = F)
+origins <- pdRaster(isoscape,
+                    unknown=UNK_WC[!(is.na(UNK_WC$dH_correct)),c(1,9)],
+                    prior=priorscape,
+                    mask = as(EUR, 'Spatial'),
+                    genplot = F,
+                    outDir="C:/Users/sop/OneDrive - Vogelwarte/Woodcock/output")
 
+
+
+
+
+
+
+
+## 3.7. CROP ASSIGNMENT TO SWITZERLAND  ----
+
+SUIorigins<-extract(origins,SUI)
 
 
 
