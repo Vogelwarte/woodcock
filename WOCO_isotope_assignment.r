@@ -10,6 +10,7 @@
 # workshop: https://github.com/JacksonKusack/Isotope-Assignment-Workshop
 # paper: https://esajournals.onlinelibrary.wiley.com/doi/full/10.1890/04-0175
 # isocat package: https://github.com/cjcampbell/isocat
+# assignR  example: https://cran.r-project.org/web/packages/assignR/vignettes/assignR.html
 
 
 
@@ -56,7 +57,7 @@ ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,dH_reg,dH_scaled,dH_correct,PROVENANCE_voigt,LATITUDE,LONGITUDE)
 UNK_WC<-woco %>% filter(ORIGINE=="UNBEKANNT") %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,dH_reg,dH_scaled,dH_correct,PROVENANCE_voigt)
-
+UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
 
 
 ## 1.2. PLOT THE DIFFERENT d2H isotope values ----
@@ -75,14 +76,12 @@ ggplot(woco, aes(x=dH_scaled,y=dH_correct, col=AGE)) +
 ## 1.3. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
 
 ggplot(woco, aes(x=dH_correct, col=ORIGINE, fill=ORIGINE)) +
-  geom_histogram(alpha=0.5,position = position_dodge(width=1)) 
+  geom_histogram(alpha=0.5,position = position_dodge(width=1))
+ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
 
 
 distd2H_knownSUI<-hist(ORIG_WC$dH_correct, breaks=seq(-130,30,5))
 distd2H_knownSUI$density   ## this can be used as prior information for the isotope assignment
-
-
-
 
 
 # 2. Feather fractionation from rainwater hydrogen isotope ----
@@ -230,81 +229,48 @@ values(priorscape)[,2]<-2  ## arbitrary value for se of prior probability
 ### because the isotope data are already converted into rainfall isotopes, we do not need the calibrated isoscape
 origins <- pdRaster(isoscape,
                     unknown=UNK_WC[!(is.na(UNK_WC$dH_correct)),c(1,9)],
-                    prior=priorscape,
+                    #prior=priorscape,
                     mask = as(EUR, 'Spatial'),
-                    genplot = F,
-                    outDir="C:/Users/sop/OneDrive - Vogelwarte/Woodcock/output")
+                    genplot = F)
+                    #outDir="C:/Users/sop/OneDrive - Vogelwarte/Woodcock/output")
 
 
+saveRDS(origins,"output/WOCO_origin_assignment.rds")
+origins<-readRDS("output/WOCO_origin_assignment.rds")
 
-
-
-
-
+### check whether values sum to 1 - they do NOT sum to 1!!??
+ALLout<-values(origins)
+ALLprob<-apply(ALLout,2,sum,na.rm=T)
+summary(ALLprob)
+global(origins[[1]], 'sum', na.rm = TRUE)
 
 ## 3.7. CROP ASSIGNMENT TO SWITZERLAND  ----
 
-SUIorigins<-extract(origins,SUI)
+SUIorigins<-terra::crop(origins,SUI)
+dim(SUIorigins)
+out<-values(SUIorigins)
+
+
+## extract the cumulative probability of Switzerland for all of the birds shot in Switzerland
+SUIprob<-apply(out,2,sum)
+UNK_WC$Swissorigin_prob<-as.numeric(SUIprob)
+any(names(SUIprob)!=UNK_WC$ID)
+
+## plot output against isotopes and date
+ggplot(UNK_WC, aes(x=Swissorigin_prob, col=PROVENANCE_voigt, fill=PROVENANCE_voigt)) +
+  geom_histogram(alpha=0.5,position = position_dodge(width=1))
+
+
+ggplot(UNK_WC, aes(x=Swissorigin_prob,y=dH_correct, col=AGE)) +
+  geom_point()
+
+
+
+## 1.3. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-# 4. Geographic assignment using assignR ----
-
-plot(naMap)
-plot(d2h_lrNA)
-names(knownOrig$sites)
-names(knownOrig$samples)
-plot(wrld_simpl)
-points(knownOrig$sites, col = "red")
-
-Ll_d = subOrigData(taxon = "Lanius ludovicianus", mask = naMap, ref_scale = NULL)  ## package data for shrikes
-d2h_Ll = calRaster(known = Ll_d, isoscape = d2h_lrNA, mask = naMap)
-
-
-## simulation of fake data
-id = letters[1:5]
-set.seed(123)
-d2H = rnorm(5, -110, 8)
-d2H.sd = runif(5, 1.5, 2.5)
-d2H_cal = rep("UT_H_1", 5)
-Ll_un = data.frame(id, d2H, d2H.sd, d2H_cal)
-print(Ll_un)
-
-## convert if reference scales differ
-Ll_un = refTrans(Ll_un, ref_scale = "OldEC.1_H_1")
-print(Ll_un)
-
-## posterior probability density map
-Ll_prob = pdRaster(d2h_Ll, Ll_un)
-
-## should sum to 1
-global(Ll_prob[[1]], 'sum', na.rm = TRUE)
-
-
-## odds ratio
-s1 = states[states$STATE_ABBR == "UT",]
-s2 = states[states$STATE_ABBR == "NM",]
-plot(naMap)
-plot(s1, col = c("red"), add = TRUE)
-plot(s2, col = c("blue"), add = TRUE)
-
-## assignment
-qtlRaster(Ll_prob, threshold = 0.1)
-qtlRaster(Ll_prob, threshold = 0.8, thresholdType = "prob")
-jointP(Ll_prob)
-Ll_up = unionP(Ll_prob)
-qtlRaster(Ll_up, threshold = 0.1)
 
 
 
