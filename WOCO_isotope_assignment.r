@@ -13,12 +13,7 @@
 # assignR  example: https://cran.r-project.org/web/packages/assignR/vignettes/assignR.html
 
 
-
-
-## NEED TO DO: create PRIOR raster of isotope probability which is distributed according to distribution of Swiss isotope histogram - include forest layer to exclude Alpine areas
-
-
-
+rm(list=ls())
 library(data.table)
 library(dplyr)
 library(tidyverse)
@@ -32,7 +27,8 @@ library(raster)
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
-
+filter<-dplyr::filter
+select<-dplyr::select
 
 
 ## set root folder for project
@@ -41,89 +37,260 @@ setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 
 
 
-# 1. READ IN PROCESSED ISOTOPE DATA ----
+# 1. READ IN PROCESSED ISOTOPE DATA ----------------
 
-### dH_reg stands for rainfall d2H
-### dH_correct is the corrected d2H of feathers to 
+### data are poorly documented - my reconstruction is as follows based on Voigt 2016 report:
+### dH: raw isotope measurements in feather keratin (but only available for half of the samples!!) - based on Berlin lab standard
+### dH_reg: corresponding rainfall hydrogen isotope ratio converted with equation in Powell (2012) (age-specific adjustment)
+### dH_scaled: is the converted d2H of feather keratin using the formula 0.979*dH + 20.701 to adjust it to Canada lab standard
+### dH_correct: is the corrected d2H of feathers IF a value was in column 'bc' (whatever the fuck this stands for)
 
 
 woco<-fread("data/WOCO_isotopes.csv")
 #woco<-read_excel("output/IsotopeAssignment_Tables.xlsx", sheet="Table14_IsotopeAssignments_Hunt")
 
 
-## 1.1. SPLIT INTO KNOWN ORIGIN AND UNKNOWN ----
+## 1.1. PLOT THE DIFFERENT d2H isotope values ----
 
-ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
-  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,dH_reg,dH_scaled,dH_correct,PROVENANCE_voigt,LATITUDE,LONGITUDE)
-UNK_WC<-woco %>% filter(ORIGINE=="UNBEKANNT") %>%
-  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,dH_reg,dH_scaled,dH_correct,PROVENANCE_voigt)
-UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
-
-
-## 1.2. PLOT THE DIFFERENT d2H isotope values ----
-
+## raw measurements against rainwater isotopes
 ggplot(woco, aes(x=dH,y=dH_reg, col=AGE)) +
   geom_point() +
   geom_smooth()
 
-
-ggplot(woco, aes(x=dH_scaled,y=dH_correct, col=AGE)) +
+## raw measurements with Berlin standard compared to Canada standard - this is a straight line because it is based on a predictable equation
+ggplot(woco, aes(x=dH_scaled,y=dH, col=AGE)) +
   geom_point() +
   geom_smooth()
+
+## assess how many are missing
+length(which(is.na(woco$dH_scaled)))
+length(which(is.na(woco$dH)))
+
+## back-convert all measurements to IZW (Berlin) standards
+woco$dH<-(woco$dH_scaled - 20.701)/0.979
+woco %>% dplyr::filter(is.na(dH))
+# ggplot(woco, aes(x=D2,y=dH, col=AGE)) +
+#   geom_point() +
+#   geom_smooth()
+
+## USE dH FOR ALL ANALYSES FROM HERE ON!!!
+
+
+
+
+## 1.2. Feather fractionation from rainwater hydrogen isotope ----
+
+## commented out after resolving the issue on 3 June 2025 - dH is the raw value we want to use
+
+# # converting isoscape rainfall values into feather d2H values
+# # based on Powell 2012, Table 3.1, page 133 with a sample size of 135 feathers
+# n <- 135
+# intcept<- rnorm(100,4.50799, (6.34005*sqrt(n)))
+# beta.rain<- rnorm(100,0.79760, (0.08049*sqrt(n)))
+# beta.age<- rnorm(100,-28.73077, (2.14900*sqrt(n)))
+# 
+# 
+# #woco$dH <- intcept + beta.rain*d2Hrain + beta.age * juvenile  ## the transformation equation of Powell based on mean annual deuterium (MAD)
+# woco$dH_Powell <- 4.50799 + 0.79760*woco$dH - 28.73077 * woco$JUVENIL
+# 
+# 
+# ggplot(woco, aes(x=dH_reg,y=dH_Powell, col=AGE)) +
+#   geom_point() +
+#   geom_smooth()
+# 
+# ggplot(woco, aes(x=dH_correct,y=dH_Powell, col=AGE)) +
+#   geom_point() +
+#   geom_smooth()
+# 
+# 
+# ggplot(woco, aes(x=dH_scaled,y=dH_Powell, col=AGE)) +
+#   geom_point() +
+#   geom_smooth()
+# 
+# 
+# ## try and figure out how values were created
+# #summary(lm(dH_correct~dH+AGE, data=woco))
+# summary(lm(dH_correct~dH_reg+AGE, data=woco))  ### this seems to be the appropriate equation
+# #summary(lm(dH_correct~dH_scaled+AGE, data=woco))
+# #summary(lm(dH_Powell~dH_reg+AGE, data=woco))
+# 
+
+## USE dH FOR ALL ANALYSES FROM HERE ON!!!
 
 
 
 ## 1.3. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
 
-ggplot(woco, aes(x=dH_correct, col=ORIGINE, fill=ORIGINE)) +
+ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
   geom_histogram(alpha=0.5,position = position_dodge(width=1))
 ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
 
 
-distd2H_knownSUI<-hist(ORIG_WC$dH_correct, breaks=seq(-130,30,5))
-distd2H_knownSUI$density   ## this can be used as prior information for the isotope assignment
+# distd2H_knownSUI<-hist(ORIG_WC$dH, breaks=seq(-130,30,5))
+# distd2H_knownSUI$density   ## this cannot be used as prior information for the isotope assignment because it is just from a corner of Switzerland
 
 
-# 2. Feather fractionation from rainwater hydrogen isotope ----
-
-# converting isoscape rainfall values into feather d2H values
-# based on Powell 2022, Table 3.1, page 133 with a sample size of 135 feathers
-n <- 135
-intcept<- rnorm(100,4.50799, (6.34005*sqrt(n)))
-beta.rain<- rnorm(100,0.79760, (0.08049*sqrt(n)))
-beta.age<- rnorm(100,-28.73077, (2.14900*sqrt(n)))
 
 
-#woco$dH <- intcept + beta.rain*d2Hrain + beta.age * juvenile  ## the transformation equation of Powell based on mean annual deuterium (MAD)
-woco$dH_Powell <- 4.50799 + 0.79760*woco$dH_reg - 28.73077 * woco$JUVENIL
+## 1.4. SPLIT INTO KNOWN ORIGIN AND UNKNOWN ----
+
+ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
+  dplyr::filter(!is.na(dH)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
+UNK_WC<-woco %>% filter(ORIGINE=="UNBEKANNT") %>%
+  dplyr::filter(!is.na(dH)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
+UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
+dim(ORIG_WC)
+dim(UNK_WC)
 
 
-ggplot(woco, aes(x=dH_reg,y=dH_Powell, col=AGE)) +
+
+
+
+
+
+
+
+# 2. ESTIMATING PROPORTION OF LOCAL BIRDS IN HUNTING BAG ---------------------
+
+## 2.1. load shapefile of Switzerland and EUROPE -------
+## OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
+
+SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
+  st_transform(st_crs('EPSG:4326')) # Project to WGS84
+plot(SUI)
+
+bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
+EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_crop(bbox) %>%
+  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
+  dplyr::select(admin,name,adm0_a3,geometry)
+plot(EUR)
+
+
+## 2.2. plot the known origin points of WOCO that were sampled -------
+
+woco.sf <- ORIG_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+
+
+ggplot(SUI) +
+  geom_sf() +
+  geom_sf(data=woco.sf,color="red")
+
+
+
+
+
+## 2.3. extract isoscape map of rainwater dH isotope ratios from across the world ----------
+
+### this function throws a weird error - downloaded and ran function independently without problem
+# isoscape <- getIsoscapes(isoType = "GlobalPrecipGS", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
+#   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
+## go to "C:/STEFFEN/Vogelwarte/assignR" and open assignR.Rproj
+## then run the script "DOWNLOAD_ISOSCAPE.R"
+
+isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+  crop(extent(SUI))
+
+## downloaded from Nelson et al 2021, but poor resolution
+# isoscape <- raster("data/Piso.AI_v1.2020_0.5deg_1950-2020.nc") %>%
+#   crop(extent(SUI))
+
+plot(isoscape, xlab="Longitude", ylab="Latitude")
+
+
+
+
+
+## 2.4. use known origin data to calibrate rainwater against feather d2H  -------
+
+
+### 2.4.1 convert woco data to SpatVector to extract values from raster ------
+
+woco.vect<-terra::vect(woco.sf)
+
+
+## 2.4.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
+
+woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
+woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
+
+
+## 2.4.3. create equation to link rainwater to d2H of feather -------
+ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
   geom_point() +
-  geom_smooth()
+  geom_smooth(method="lm") +
+  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
+        panel.grid.minor = element_blank(),
+        axis.text=element_text(size=16, color="black"), 
+        axis.title=element_text(size=18),
+        legend.position="inside",
+        legend.position.inside=c(0.10,0.90),
+        legend.box.background = element_blank(),
+        legend.background = element_blank(),
+        legend.title=element_text(size=18),
+        legend.text=element_text(size=16, color="black"))
 
-ggplot(woco, aes(x=dH_correct,y=dH_Powell, col=AGE)) +
-  geom_point() +
-  geom_smooth()
+ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
 
-
-ggplot(woco, aes(x=dH_scaled,y=dH_Powell, col=AGE)) +
-  geom_point() +
-  geom_smooth()
-
-
-## try and figure out how values were created
-#summary(lm(dH_correct~dH+AGE, data=woco))
-summary(lm(dH_correct~dH_reg+AGE, data=woco))  ### this seems to be the appropriate equation
-#summary(lm(dH_correct~dH_scaled+AGE, data=woco))
-summary(lm(dH_Powell~dH_reg+AGE, data=woco))
+ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
+summary(ISO_CALIB)
 
 
 
 
-## 2.1. building our own equation using the known origin feather samples ----
-## this looks weird like somebody had calculated the dH_reg
-summary(lm(dH~dH_reg+AGE, data=ORIG_WC))
+### 2.4.4. apply that equation to all other shot woodcocks -------
+woco.unk.sf <- UNK_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+woco.unk.vect<-terra::vect(woco.unk.sf)
+
+woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
+woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+woco.unk.sf %>% filter(is.na(AGE))
+
+d2H_pred<-predict(ISO_CALIB,newdata=woco.unk.sf,se.fit=TRUE,interval="prediction",level=0.95, type = "response")$fit
+
+
+
+## 2.4.5. test whether each shot feather came from within location-specific prediction interval -------
+
+OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
+  filter(!is.na(AGE)) %>%
+  filter(!is.na(dH)) %>%
+  st_drop_geometry() %>%
+  mutate(LOCAL=ifelse(dH>lwr & dH<upr,1,0)) %>%
+  group_by(AGE, KANTON) %>%
+  summarise(prop.local=mean(LOCAL, na.rm=T)) %>%
+  spread(key=AGE, value=prop.local) %>%
+  rename(prop_adult_local=Adulte, prop_juvenile_local=Juvénile)
+
+OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
+  filter(!is.na(AGE)) %>%
+  filter(!is.na(dH)) %>%
+  st_drop_geometry() %>%
+  mutate(LOCAL=ifelse(dH>lwr & dH<upr,1,0)) %>%
+  group_by(AGE, KANTON) %>%
+  summarise(n=length(LOCAL)) %>%
+  spread(key=AGE, value=n, fill=0) %>%
+  rename(N_adult=Adulte, N_juvenile=Juvénile) %>%
+  left_join(OUT_SUMMARY, by="KANTON")
+
+OUT_SUMMARY
+
+fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
+
+
+
+
+
+
+
+
 
 
 
@@ -133,7 +300,7 @@ summary(lm(dH~dH_reg+AGE, data=ORIG_WC))
 # 3. Geographic assignment using assignR ----
 
 ## 3.1. load shapefile of Switzerland and EUROPE ----
-### NEED TO CURTAIL TO FOREST AREAS FROM WALD LAYER
+### OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
 
 SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
   st_transform(st_crs('EPSG:4326')) # Project to WGS84
@@ -166,13 +333,17 @@ ggplot(SUI) +
 ## 3.3. extract isoscape ----
 
 ### this function throws a weird error - downloaded and ran function independently without problem
-# isoscape <- getIsoscapes(isoType = "USTap", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
+# isoscape <- getIsoscapes(isoType = "GlobalPrecipGS", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
 #   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
-# 
-# isoscape <- isoscape [[1:2]]  ## retain only dH
-# saveRDS(isoscape,"data/global_d2H_MA_isoscape.rds")
-isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
-  crop(extent(EUR))
+## go to "C:/STEFFEN/Vogelwarte/assignR" and open assignR.Rproj
+## then run the script "DOWNLOAD_ISOSCAPE.R"
+
+isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+  crop(extent(SUI))
+
+## downloaded from Nelson et al 2021, but poor resolution
+# isoscape <- raster("data/Piso.AI_v1.2020_0.5deg_1950-2020.nc") %>%
+#   crop(extent(SUI))
 
 plot(isoscape, xlab="Longitude", ylab="Latitude")
 
@@ -203,6 +374,76 @@ isoscape.AD<- 4.50799 + 0.79760*isoscape
 isoscape.JUV<- 4.50799 + 0.79760*isoscape - 28.73077
 
 plot(isoscape.AD, xlab="Longitude", ylab="Latitude")
+
+
+
+
+## 3.4.1 building our own equation using the known origin feather samples ----
+## this looks weird like somebody had calculated the dH_reg
+# summary(lm(dH~dH_reg+AGE, data=ORIG_WC))
+
+## 3.4.1.1. convert data to SpatVector ------
+
+woco.vect<-terra::vect(woco.sf)
+
+
+## 3.4.1.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
+
+woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
+woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
+
+
+## 3.4.1.3. create equation to link rainwater to d2H of feather -------
+ggplot(woco.sf, aes(x=d2h_GS,y=dH_reg, col=AGE, fill=AGE)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
+        panel.grid.minor = element_blank(),
+        axis.text=element_text(size=16, color="black"), 
+        axis.title=element_text(size=18),
+        legend.position="inside",
+        legend.position.inside=c(0.10,0.90),
+        legend.box.background = element_blank(),
+        legend.background = element_blank(),
+        legend.title=element_text(size=18),
+        legend.text=element_text(size=16, color="black"))
+
+ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
+
+ISO_CALIB<-lm(dH_reg~d2h_GS, data=woco.sf)
+summary(ISO_CALIB)
+
+
+
+
+## 3.4.1.4. apply that equation to all other shot woodcocks -------
+woco.unk.sf <- UNK_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+woco.unk.vect<-terra::vect(woco.unk.sf)
+
+woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
+woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+woco.unk.sf %>% filter(is.na(AGE))
+
+d2H_pred<-predict(ISO_CALIB,newdata=woco.unk.sf,se.fit=TRUE,interval="prediction",level=0.95, type = "response")$fit
+
+
+
+## 3.4.1.5. test whether each shot feather came from within location-specific prediction interval -------
+
+OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
+  filter(!is.na(dH_reg)) %>%
+  st_drop_geometry() %>%
+  mutate(LOCAL=ifelse(dH_reg>lwr & dH_reg<upr,1,0)) %>%
+  group_by(AGE, KANTON) %>%
+  summarise(prop.local=mean(LOCAL, na.rm=T)) %>%
+  spread(key=AGE, value=prop.local)
+
+fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
+
 
 
 
@@ -263,128 +504,3 @@ ggplot(UNK_WC, aes(x=Swissorigin_prob, col=PROVENANCE_voigt, fill=PROVENANCE_voi
 
 ggplot(UNK_WC, aes(x=Swissorigin_prob,y=dH_correct, col=AGE)) +
   geom_point()
-
-
-
-## 1.3. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
-
-
-
-
-
-
-
-
-# 5. SUGGESTIONS BY COPILOT WITHOUT CONSIDERING ANY ISOSCAPE ----
-
-
-
-To estimate the probability that birds come from Switzerland based on isotope ratios in their feathers, you can use a statistical approach known as **Bayesian inference**. Here's a step-by-step outline of how you might proceed:
-
-1. **Collect Data**: 
-   - Obtain the isotope ratios (e.g., hydrogen, strontium) in feathers from birds of known Swiss origin.
-   - Collect isotope ratios from feathers of birds with unknown origins.
-
-2. **Model the Data**:
-   - Assume that the isotope ratios from Swiss birds follow a certain probability distribution (e.g., normal distribution). This distribution is your **prior** knowledge.
-   - The isotope ratios from the unknown birds are your **observed data**.
-
-3. **Calculate Likelihood**:
-   - For each bird of unknown origin, calculate the likelihood of observing its isotope ratio given the distribution of isotope ratios from Swiss birds. This involves using the probability density function of the assumed distribution.
-
-4. **Apply Bayes' Theorem**:
-  - Use Bayes' Theorem to update your prior knowledge with the observed data to get the **posterior probability**. Bayes' Theorem is given by:
-  $$
-  P(\text{Swiss} \mid \text{Data}) = \frac{P(\text{Data} \mid \text{Swiss}) \cdot P(\text{Swiss})}{P(\text{Data})}
-$$
-  where:
-  - \( P(\text{Swiss} \mid \text{Data}) \) is the posterior probability that the bird is from Switzerland given the observed data.
-- \( P(\text{Data} \mid \text{Swiss}) \) is the likelihood of observing the data given that the bird is from Switzerland.
-- \( P(\text{Swiss}) \) is the prior probability that a bird is from Switzerland.
-- \( P(\text{Data}) \) is the marginal likelihood of the data.
-
-5. **Interpret Results**:
-  - The posterior probability gives you an updated estimate of the likelihood that the bird is from Switzerland based on its isotope ratios.
-
-### Example Calculation
-Let's say you have a normal distribution for the isotope ratios of Swiss birds with mean \( \mu \) and standard deviation \( \sigma \). For an unknown bird with isotope ratio \( x \), the likelihood \( P(x \mid \text{Swiss}) \) can be calculated using the normal distribution's probability density function:
-  $$
-  P(x \mid \text{Swiss}) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)
-$$
-  
-  You can then plug this into Bayes' Theorem to get the posterior probability.
-
-### Tools and Software
-- **R** or **Python**: Both have libraries for Bayesian analysis (e.g., `rjags` in R, `PyMC3` in Python).
-- **Stable Isotope Mixing Models**: Tools like IsoSource or MixSIAR can help in analyzing isotope data [1](https://www.epa.gov/eco-research/stable-isotope-mixing-models-estimating-source-proportions).
-
-Would you like more detailed guidance on any of these steps?
-
-
-To incorporate an informative prior based on the isotope ratios from Swiss birds into your Nimble model, you can use the data from Swiss birds to define the prior distributions for the parameters (mean `mu` and standard deviation `sigma`). Here's how you can modify the previous code to include this informative prior:
-
-1. **Calculate the Prior Parameters**: Use the isotope ratios from Swiss birds to estimate the mean and standard deviation. These estimates will be used to define the prior distributions.
-
-2. **Modify the Model**: Update the prior distributions for `mu` and `sigma` based on the calculated parameters.
-
-Here's an example:
-  
-  ```r
-library(nimble)
-
-# Simulated data: isotope ratios for birds of Swiss origin
-isotope_ratio_swiss <- c(1.1, 1.3, 1.4, 1.6, 1.7)
-
-# Calculate the mean and standard deviation from Swiss data
-mu_prior <- mean(isotope_ratio_swiss)
-sigma_prior <- sd(isotope_ratio_swiss)
-
-# Define the model with informative priors
-code <- nimbleCode({
-  for (i in 1:N) {
-    isotope_ratio[i] ~ dnorm(mu, sd = sigma)
-  }
-  mu ~ dnorm(mu_prior, sd = sigma_prior)
-  sigma ~ dunif(0, 50)
-})
-
-# Simulated data: isotope ratios for birds of unknown origin
-isotope_ratio_unknown <- c(1.2, 1.5, 1.8, 2.0, 2.3)
-
-# Number of observations
-N <- length(isotope_ratio_unknown)
-
-# Define constants and data
-constants <- list(N = N, mu_prior = mu_prior, sigma_prior = sigma_prior)
-data <- list(isotope_ratio = isotope_ratio_unknown)
-
-# Initial values for the parameters
-inits <- list(mu = mu_prior, sigma = sigma_prior)
-
-# Create the model
-model <- nimbleModel(code, constants = constants, data = data, inits = inits)
-
-# Configure and build MCMC
-mcmc_conf <- configureMCMC(model)
-mcmc <- buildMCMC(mcmc_conf)
-
-# Compile the model and MCMC
-Cmodel <- compileNimble(model)
-Cmcmc <- compileNimble(mcmc, project = model)
-
-# Run the MCMC
-samples <- runMCMC(Cmcmc, niter = 10000)
-
-# Summary of the posterior samples
-summary(samples)
-```
-
-### Explanation:
-1. **Prior Parameters**: The mean (`mu_prior`) and standard deviation (`sigma_prior`) are calculated from the isotope ratios of Swiss birds.
-2. **Model Definition**: The prior for `mu` is now a normal distribution with mean `mu_prior` and standard deviation `sigma_prior`. The prior for `sigma` remains a uniform distribution.
-3. **Constants**: The calculated prior parameters are included in the constants list.
-4. **Initial Values**: The initial values for `mu` and `sigma` are set to the calculated prior parameters.
-
-This approach ensures that the prior information from Swiss birds is incorporated into the model, providing a more informed estimate of the probability that the birds of unknown origin are from Switzerland.
-
-If you have any further questions or need additional adjustments, feel free to ask!
