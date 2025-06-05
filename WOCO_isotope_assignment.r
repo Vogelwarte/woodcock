@@ -28,8 +28,11 @@ library(raster)
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(coda)
+library(MCMCvis)
 library(nimble)
 library(tictoc)
+library(basicMCMCplots) # for trace plots called chainsPlot
 filter<-dplyr::filter
 select<-dplyr::select
 
@@ -211,8 +214,8 @@ WOCO.isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
   crop(woco.countries)
 plot(WOCO.isoscape)
 
-mean.rain.d2H<-mean(na.omit(values(WOCO.isoscape)[,1]), na.rm=T)
-sd.rain.d2H<-sd(na.omit(values(WOCO.isoscape)[,1]), na.rm=T)
+mean.rain.d2H<-mean(na.omit(terra::values(WOCO.isoscape)[,1]), na.rm=T)
+sd.rain.d2H<-sd(na.omit(terra::values(WOCO.isoscape)[,1]), na.rm=T)
 hist(rnorm(1000,mean.rain.d2H,sd.rain.d2H))
 
 
@@ -310,7 +313,6 @@ fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
 
 woco.orig.model<-nimbleCode({
   
-  # -------------------------------------------------
   # Parameters:
   # p.loc: probability of local origin (that shot woodcock was a local bird) - varies by age and canton
   
@@ -318,9 +320,9 @@ woco.orig.model<-nimbleCode({
   # b.rain: regression parameter for rainfall d2H that translates rainfall d2H to feather d2H
   # int.rain: regression intercept that translates rainfall d2H to feather d2H 
   
-  # -------------------------------------------------
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # CALIBRATION REGRESSION FOR KNOWN ORIGIN BIRDS 
-  # -------------------------------------------------
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Likelihood:  
   for (i in 1:nind.known){
         d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib) # tau is precision (1 / variance)
@@ -328,17 +330,17 @@ woco.orig.model<-nimbleCode({
       }
     
   # Priors informed by known origin woodcock feathers in UK (Powell thesis 2012)
-  int.rain ~ dnorm(4.5, sd=50) # informative prior based on Powell
-  b.age ~ dnorm(-28.7, sd=25) # informative prior based on Powell
+  int.rain ~ dnorm(4.5, sd=5) # informative prior based on Powell
+  b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
   b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
-  sigma.calib ~ dunif(0,10) # standard deviation
+  sigma.calib ~ dunif(0,20) # standard deviation
       
       
 
 
-# -------------------------------------------------
-# PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
-# -------------------------------------------------
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #### PRIOR PROBABILITIES OF LOCAL ORIGIN
 for (ct in 1:ncanton){
@@ -414,10 +416,10 @@ parameters.iso <- c("p.loc","b.rain","b.age","int.rain","sigma.calib")
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
 
 iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifelse(woco.unk.sf$AGE=="Adulte",0,1),0,1),
-                  int.rain = rnorm(1,4.5, sd=50), # informative prior based on Powell
-                  b.age = rnorm(1,-28.7, sd=25), # informative prior based on Powell
+                  int.rain = rnorm(1,4.5, sd=5), # informative prior based on Powell
+                  b.age = rnorm(1,-28.7, sd=5), # informative prior based on Powell
                   b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
-                  sigma.calib = runif(1,0,10), # standard deviation
+                  sigma.calib = runif(1,0,20), # standard deviation
                   
                   #### FLAT PRIOR PROBABILITY FOR BEING LOCAL BIRD
                   p.loc=matrix(rbeta(length(unique(woco.unk.sf$KANTON))*2,2,4.5),ncol=2)  ###  hist(rbeta(1000,2,4.5))
@@ -427,19 +429,19 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
 
 
 # PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
-test <- nimbleModel(code = woco.orig.model,
-                    constants=iso.constants,
-                    data = iso.data,
-                    inits = iso.inits,
-                    calculate=TRUE)
-
-### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
-test$initializeInfo()
-#help(modelInitialization)
-
-### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
+# test <- nimbleModel(code = woco.orig.model,
+#                     constants=iso.constants,
+#                     data = iso.data,
+#                     inits = iso.inits,
+#                     calculate=TRUE)
+# 
+# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
+# test$initializeInfo()
+# #help(modelInitialization)
+# 
+# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
 
 
 # MCMC settings
@@ -451,8 +453,7 @@ n.chains <- 4
 
 
 ## 3.4. run model in NIMBLE ------------------------------------------
-
-
+## this takes 5 min
 
 tic()
 ### this takes 4000 sec (2 hrs) for 20000 iterations and converges in that time
@@ -472,22 +473,94 @@ toc()
 
 
 saveRDS(woco.iso,"output/woco_iso_origin_model.rds")
-#woco_surv<-readRDS("output/woco_mig_depart_output_nimble.rds")
+#woco_surv<-readRDS("output/woco_iso_origin_model.rds")
+
+
+
+
+
+## 3.5. assess model and examine convergence ------------------------------------------
+
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.loc","b.rain","b.age","int.rain","sigma.calib")))
+out$parameter<-row.names(out)
+names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
+#out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
+out
+fwrite(out,"output/woco_iso_origin_parm_estimates.csv")
+#out<-fread("output/woco_iso_origin_parm_estimates.csv")
+
+
+MCMCplot(woco.iso$samples, params=c("p.loc"))
+
+
+## look at the chains and whether they mixed well
+chainsPlot(woco.iso$samples,
+           var=c("b.rain","b.age","int.rain","sigma.calib"))
 
 
 
 
 
 
+## 3.6. summarise output in graphical form ------------------------------------------
+
+# LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
+require(png)
+library(grid)
+library(gtable)
+require(jpeg)
+library(magick)
+imgGun<-readPNG("manuscript/rifleicon.png")
+gunicon <- rasterGrob(imgGun, interpolate=TRUE)
+imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
+wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
 
+FIGURE<-out %>%
+  filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib")) %>%
+  mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
+  mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
+  mutate(Canton=readr::parse_number(parameter,locale=locale(grouping_mark=". ", decimal_mark=","))) %>%  ### parse_number doesn't deal with dots: https://stackoverflow.com/questions/61328339/r-parse-number-fails-if-the-string-contains-a-dot
+  mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[Canton]) %>%
+  mutate(for.med=(1-median),for.ucl=1-lcl, for.lcl=1-ucl) %>%
+  
+  ggplot(aes(x=Canton, y=for.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  
+  ## format axis ticks
+  labs(y="Prop. of shot woodcock that are not local",x="Swiss Canton",col="") +
+  scale_x_continuous(limits=c(0.5,6.5), breaks=c(1:6), labels=levels(as.factor(woco.unk.sf$KANTON))) +
+  # scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
+  # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
+  # 
+  ### add the bird icons
+  annotation_custom(gunicon, xmin=4.8, xmax=5.4, ymin=0.06, ymax=0.14)+
+  annotation_custom(wocoicon, xmin=5.2, xmax=6.4, ymin=0.14, ymax=0.26)+
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.85,0.1),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURE
 
-
-
-
-
-
-
+ggsave(plot=FIGURE,
+       filename="output/woco_iso_origin_probability_estimates.jpg", 
+       device="jpg",width=11, height=8)
 
 
 
