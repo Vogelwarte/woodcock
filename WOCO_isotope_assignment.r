@@ -151,10 +151,12 @@ dim(ORIG_WC)
 dim(UNK_WC)
 
 
-
-
-
-
+## report numbers in manuscript
+table(ORIG_WC$AGE)
+length(UNK_WC$dH)
+table(UNK_WC$AGE)
+summary(ORIG_WC$dH)
+summary(UNK_WC$dH)
 
 
 
@@ -275,7 +277,7 @@ woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 #   theme(panel.background=element_rect(fill="white", colour="black"),
 #         panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
 #         panel.grid.minor = element_blank(),
-#         axis.text=element_text(size=16, color="black"), 
+#         axis.text=element_text(size=16, color="black"),
 #         axis.title=element_text(size=18),
 #         legend.position="inside",
 #         legend.position.inside=c(0.10,0.90),
@@ -283,7 +285,6 @@ woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 #         legend.background = element_blank(),
 #         legend.title=element_text(size=18),
 #         legend.text=element_text(size=16, color="black"))
-# 
 # #ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
 # 
 # ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
@@ -359,7 +360,7 @@ woco.orig.model<-nimbleCode({
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Likelihood:  
   for (i in 1:nind.known){
-        d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib) # tau is precision (1 / variance)
+        d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib)
         mu.known[i] <- int.rain + b.age*age.known[i] + b.rain*d2H_rain.known[i]
       }
     
@@ -379,7 +380,7 @@ woco.orig.model<-nimbleCode({
 #### PRIOR PROBABILITIES OF LOCAL ORIGIN
 for (ct in 1:ncanton){
   for (a in 1:2){
-    p.loc[ct,a] ~ dbeta(2,4.5)   ##  hist(rbeta(1000,2,4.5)) very low and very high probabilities are less likely a priori
+    p.loc[ct,a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,4.5)) very low and very high probabilities are less likely a priori
   } #a
 } #ct
 
@@ -533,10 +534,17 @@ chainsPlot(woco.iso$samples,
 
 
 
+## 3.6. summarise output for manuscript text ------------------------------------------
+
+out %>%
+  filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib")) %>%
+  mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
+  mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
+  group_by(Age) %>%
+  summarise(m=mean(mean),l=min(lcl), u=max(ucl))
 
 
-
-## 3.6. summarise output in graphical form ------------------------------------------
+## 3.7. summarise output in graphical form ------------------------------------------
 
 # LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
 require(png)
@@ -556,7 +564,7 @@ FIGURE<-out %>%
   mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
   mutate(Canton=readr::parse_number(parameter,locale=locale(grouping_mark=". ", decimal_mark=","))) %>%  ### parse_number doesn't deal with dots: https://stackoverflow.com/questions/61328339/r-parse-number-fails-if-the-string-contains-a-dot
   mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[Canton]) %>%
-  mutate(for.med=(1-median),for.ucl=1-lcl, for.lcl=1-ucl) %>%
+  mutate(for.med=(median),for.ucl=lcl, for.lcl=ucl) %>%
   
   ggplot(aes(x=Canton, y=for.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
@@ -569,8 +577,8 @@ FIGURE<-out %>%
   # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
   # 
   ### add the bird icons
-  annotation_custom(gunicon, xmin=4.8, xmax=5.4, ymin=0.06, ymax=0.14)+
-  annotation_custom(wocoicon, xmin=5.2, xmax=6.4, ymin=0.14, ymax=0.26)+
+  annotation_custom(gunicon, xmin=5.2, xmax=5.8, ymin=0.88, ymax=0.96)+
+  annotation_custom(wocoicon, xmin=5.5, xmax=6.9, ymin=0.85, ymax=1.02)+
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
@@ -587,7 +595,7 @@ FIGURE<-out %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.85,0.1),
+        legend.position.inside=c(0.75,0.15),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE
