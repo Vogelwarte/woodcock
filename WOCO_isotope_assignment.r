@@ -12,7 +12,7 @@
 
 
 ## MAJOR ADDITION ON 5 June 2025: added JAGS model to estimate probability of local origin for shot woodcock
-
+## MAJOR ADDITION ON 11 June 2025: added GlobCover data to extract isotope distribution from forest areas in NW Europe
 
 rm(list=ls())
 library(data.table)
@@ -206,17 +206,49 @@ isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
 
 
 
-## overlay isoscape with woodcock distribution and generate mean feather distribution
+### 2.3.1. curtail woodcock distribution to potential origin countries and FOREST
 woco.countries <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Switzerland","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
                              "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+
+## create a conversion matrix
+forest.mat<-matrix(0, nrow=3, ncol=3)
+forest.mat[,1]<-c(11,40,110)  ## from values for conversion matrix
+forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
+forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
+
+## create forest raster layer
+globcover<-terra::rast("S:/rasters/landuse/world/globcover2009.tif") %>%
+  crop(woco.countries) %>%
+  terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
+  terra::project(.,crs(isoscape))
+crs(globcover)
+summary(globcover)
+plot(globcover)
+
+
+### 2.3.2. multiply isoscape with woodcock distribution and generate mean feather distribution
 WOCO.isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
   crop(woco.countries)
 plot(WOCO.isoscape)
 
-mean.rain.d2H<-mean(na.omit(terra::values(WOCO.isoscape)[,1]), na.rm=T)
-sd.rain.d2H<-sd(na.omit(terra::values(WOCO.isoscape)[,1]), na.rm=T)
+## remove all non-forest areas by multiplying with 0
+crs(globcover)==crs(WOCO.isoscape)
+origin(globcover)
+origin(WOCO.isoscape)
+
+## because the globcover layer has a much finer resolution, we need to resample
+globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
+WOCO.isoscape <- WOCO.isoscape*globcover
+
+## extract hydrogen isotope values from that distribution
+rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
+rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+mean.rain.d2H<-mean(rain.d2H, na.rm=T)
+sd.rain.d2H<-sd(rain.d2H, na.rm=T)
 hist(rnorm(1000,mean.rain.d2H,sd.rain.d2H))
+
+
 
 
 ## 2.4. use known origin data to calibrate rainwater against feather d2H  -------
@@ -234,70 +266,72 @@ woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 
 
 ## 2.4.3. create equation to link rainwater to d2H of feather -------
-ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
-  geom_point() +
-  geom_smooth(method="lm") +
-  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
-        panel.grid.minor = element_blank(),
-        axis.text=element_text(size=16, color="black"), 
-        axis.title=element_text(size=18),
-        legend.position="inside",
-        legend.position.inside=c(0.10,0.90),
-        legend.box.background = element_blank(),
-        legend.background = element_blank(),
-        legend.title=element_text(size=18),
-        legend.text=element_text(size=16, color="black"))
-
-#ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
-
-ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
-summary(ISO_CALIB)
-
-
-
-
-### 2.4.4. apply that equation to all other shot woodcocks -------
-woco.unk.sf <- UNK_WC %>%
-  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-woco.unk.vect<-terra::vect(woco.unk.sf)
-
-woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
-woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
-woco.unk.sf %>% filter(is.na(AGE))
-
-d2H_pred<-predict(ISO_CALIB,newdata=woco.unk.sf,se.fit=TRUE,interval="prediction",level=0.95, type = "response")$fit
-
-
-
-## 2.4.5. test whether each shot feather came from within location-specific prediction interval -------
-
-OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
-  filter(!is.na(AGE)) %>%
-  filter(!is.na(dH)) %>%
-  st_drop_geometry() %>%
-  mutate(LOCAL=ifelse(dH>lwr & dH<upr,1,0)) %>%
-  group_by(AGE, KANTON) %>%
-  summarise(prop.local=mean(LOCAL, na.rm=T)) %>%
-  spread(key=AGE, value=prop.local) %>%
-  rename(prop_adult_local=Adulte, prop_juvenile_local=Juvénile)
-
-OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
-  filter(!is.na(AGE)) %>%
-  filter(!is.na(dH)) %>%
-  st_drop_geometry() %>%
-  mutate(LOCAL=ifelse(dH>lwr & dH<upr,1,0)) %>%
-  group_by(AGE, KANTON) %>%
-  summarise(n=length(LOCAL)) %>%
-  spread(key=AGE, value=n, fill=0) %>%
-  rename(N_adult=Adulte, N_juvenile=Juvénile) %>%
-  left_join(OUT_SUMMARY, by="KANTON")
-
-OUT_SUMMARY
-
-fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
+## SUPERSEDED BY NIMBLE MODEL BELOW
+# ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
+#   geom_point() +
+#   geom_smooth(method="lm") +
+#   labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
+#   ## beautification of the axes
+#   theme(panel.background=element_rect(fill="white", colour="black"),
+#         panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
+#         panel.grid.minor = element_blank(),
+#         axis.text=element_text(size=16, color="black"), 
+#         axis.title=element_text(size=18),
+#         legend.position="inside",
+#         legend.position.inside=c(0.10,0.90),
+#         legend.box.background = element_blank(),
+#         legend.background = element_blank(),
+#         legend.title=element_text(size=18),
+#         legend.text=element_text(size=16, color="black"))
+# 
+# #ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
+# 
+# ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
+# summary(ISO_CALIB)
+# 
+# 
+# 
+# 
+# ### 2.4.4. apply that equation to all other shot woodcocks -------
+# ## deterministic approach without considering uncertainty
+# woco.unk.sf <- UNK_WC %>%
+#   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+# woco.unk.vect<-terra::vect(woco.unk.sf)
+# 
+# woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
+# woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+# woco.unk.sf %>% filter(is.na(AGE))
+# 
+# d2H_pred<-predict(ISO_CALIB,newdata=woco.unk.sf,se.fit=TRUE,interval="prediction",level=0.95, type = "response")$fit
+# 
+# 
+# 
+# ## 2.4.5. test whether each shot feather came from within location-specific prediction interval -------
+# 
+# OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
+#   filter(!is.na(AGE)) %>%
+#   filter(!is.na(dH)) %>%
+#   st_drop_geometry() %>%
+#   mutate(LOCAL=ifelse(dH>lwr & dH<upr,1,0)) %>%
+#   group_by(AGE, KANTON) %>%
+#   summarise(prop.local=mean(LOCAL, na.rm=T)) %>%
+#   spread(key=AGE, value=prop.local) %>%
+#   rename(prop_adult_local=Adulte, prop_juvenile_local=Juvénile)
+# 
+# OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
+#   filter(!is.na(AGE)) %>%
+#   filter(!is.na(dH)) %>%
+#   st_drop_geometry() %>%
+#   mutate(LOCAL=ifelse(dH>lwr & dH<upr,1,0)) %>%
+#   group_by(AGE, KANTON) %>%
+#   summarise(n=length(LOCAL)) %>%
+#   spread(key=AGE, value=n, fill=0) %>%
+#   rename(N_adult=Adulte, N_juvenile=Juvénile) %>%
+#   left_join(OUT_SUMMARY, by="KANTON")
+# 
+# OUT_SUMMARY
+# 
+# #fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
 
 
 
@@ -350,8 +384,8 @@ for (ct in 1:ncanton){
 } #ct
 
   # Likelihood 
-  sd.unknown[1]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
-  sd.unknown[2]<-sigma.calib
+  sd.unknown[2]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
+  sd.unknown[1]<-sigma.calib
   
   for (i in 1:nind.unkn){
     
@@ -359,8 +393,8 @@ for (ct in 1:ncanton){
     z[i] ~ dbern(p.loc[canton[i],age.unknown[i]+1])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
     
     # Potential local distribution
-    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
-    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]
+    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
+    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]
 
     # evaluate origin feather isotope value from plausible target distributions
     d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
