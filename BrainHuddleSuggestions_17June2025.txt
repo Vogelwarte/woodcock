@@ -1,0 +1,7 @@
+Woodcock Brain Huddle 17 June 2025
+
+Suggestions:
+- Pius: include temporal phenology of abundance and date when bird was shot to alter probability of foreign origin based on date (later more likely to be non-local)
+- Murdy: create map for each canton that shows what region is covered by the term 'local' based on equivalent rain d2H
+- Elli: get Swiss high resolution isotope data and create calibration for rainwater-feather isotope ratios based on actual local simultaneous measurements. This calibration then cannot be used outside of Switzerland, so only purpose would be to show potential differences in calibration?
+- Urs: provide overall mean probability 

@@ -14,6 +14,13 @@
 ## MAJOR ADDITION ON 5 June 2025: added JAGS model to estimate probability of local origin for shot woodcock
 ## MAJOR ADDITION ON 11 June 2025: added GlobCover data to extract isotope distribution from forest areas in NW Europe
 
+## UPDATE 17 June 2025:
+
+# Pius: include temporal phenology of abundance and date when bird was shot to alter probability of foreign origin based on date (later more likely to be non-local)
+# Murdy: create map for each canton that shows what region is covered by the term 'local' based on equivalent rain d2H
+# Elli: get Swiss high resolution isotope data and create calibration for rainwater-feather isotope ratios based on actual local simultaneous measurements. This calibration then cannot be used outside of Switzerland, so only purpose would be to show potential differences in calibration?
+# Urs: provide overall mean probability 
+
 rm(list=ls())
 library(data.table)
 library(dplyr)
@@ -295,13 +302,13 @@ woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 # 
 # ### 2.4.4. apply that equation to all other shot woodcocks -------
 # ## deterministic approach without considering uncertainty
-# woco.unk.sf <- UNK_WC %>%
-#   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-# woco.unk.vect<-terra::vect(woco.unk.sf)
-# 
-# woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
-# woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
-# woco.unk.sf %>% filter(is.na(AGE))
+woco.unk.sf <- UNK_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+woco.unk.vect<-terra::vect(woco.unk.sf)
+
+woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
+woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+woco.unk.sf %>% filter(is.na(AGE))
 # 
 # d2H_pred<-predict(ISO_CALIB,newdata=woco.unk.sf,se.fit=TRUE,interval="prediction",level=0.95, type = "response")$fit
 # 
@@ -377,13 +384,31 @@ woco.orig.model<-nimbleCode({
   # PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#### PRIOR PROBABILITIES OF LOCAL ORIGIN
-for (ct in 1:ncanton){
-  for (a in 1:2){
-    p.loc[ct,a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,4.5)) very low and very high probabilities are less likely a priori
+  #### RANDOM EFFECT FOR EACH CANTON
+  for (ct in 1:ncanton){
+    cant.reff[ct] ~ dnorm(0,sd=1)   ##  random normal effect centred on zero to get canton-specific probabilities
   } #a
-} #ct
 
+  
+  #### OVERALL PRIOR PROBABILITY OF NON-LOCAL ORIGIN
+  #for (ct in 1:ncanton){
+    for (a in 1:2){
+      mean.p.nonlocal[a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
+      logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal[a] / (1-mean.p.nonlocal[a]))
+    } #a
+  #} #ct
+  
+  
+  #### LINEAR PREDICTOR OF AGE AND CANTON-SPECIFIC PROBABILITY OF NON-LOCAL ORIGIN
+  
+  for (ct in 1:ncanton){
+    for (a in 1:2){
+      logit.p.nonlocal[ct,a] <- logit.mean.p.nonlocal[a] + cant.reff[ct]  ##  combination of overall mean and random effect
+      p.nonlocal[ct,a]<-ilogit(logit.p.nonlocal[ct,a])
+    } #a
+  } #ct
+  
+  
   # Likelihood 
   sd.unknown[2]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
   sd.unknown[1]<-sigma.calib
@@ -391,7 +416,7 @@ for (ct in 1:ncanton){
   for (i in 1:nind.unkn){
     
     # Latent indicator 
-    z[i] ~ dbern(p.loc[canton[i],age.unknown[i]+1])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
+    z[i] ~ dbern(p.nonlocal[canton[i],age.unknown[i]+1])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
     
     # Potential local distribution
     mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
@@ -445,7 +470,7 @@ iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
 ## 3.3. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("p.loc","b.rain","b.age","int.rain","sigma.calib")
+parameters.iso <- c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib")
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -457,9 +482,12 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
                   sigma.calib = runif(1,0,20), # standard deviation
                   
                   #### FLAT PRIOR PROBABILITY FOR BEING LOCAL BIRD
-                  p.loc=matrix(rbeta(length(unique(woco.unk.sf$KANTON))*2,2,4.5),ncol=2)  ###  hist(rbeta(1000,2,4.5))
- 
+                  mean.p.nonlocal=rbeta(2,2,4.5),  ###  hist(rbeta(1000,2,4.5))
+                  cant.reff=rnorm(iso.constants$ncanton,0,1)
+                  #p.loc=matrix(rbeta(length(unique(woco.unk.sf$KANTON))*2,2,4.5),ncol=2)  ###  hist(rbeta(1000,2,4.5))
 )
+
+#iso.inits$p.nonlocal<-matrix(rbeta(iso.constants$ncanton*2,2,2),ncol=2)
 
 
 
@@ -473,10 +501,10 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
 # ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
 # test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
 # test$initializeInfo()
-# #help(modelInitialization)
-# 
-# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
+#help(modelInitialization)
+
+### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
 
 
 # MCMC settings
@@ -516,7 +544,7 @@ saveRDS(woco.iso,"output/woco_iso_origin_model.rds")
 
 ## 3.5. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.loc","b.rain","b.age","int.rain","sigma.calib")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -525,7 +553,7 @@ fwrite(out,"output/woco_iso_origin_parm_estimates.csv")
 #out<-fread("output/woco_iso_origin_parm_estimates.csv")
 
 
-MCMCplot(woco.iso$samples, params=c("p.loc"))
+MCMCplot(woco.iso$samples, params=c("p.nonlocal"))
 
 
 ## look at the chains and whether they mixed well
@@ -535,13 +563,19 @@ chainsPlot(woco.iso$samples,
 
 
 ## 3.6. summarise output for manuscript text ------------------------------------------
+## changed after model includes mean and random effect
+# out %>%
+#   filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib")) %>%
+#   mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
+#   mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
+#   group_by(Age) %>%
+#   summarise(m=mean(mean),l=min(lcl), u=max(ucl))
 
-out %>%
-  filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib")) %>%
-  mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
-  mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
-  group_by(Age) %>%
-  summarise(m=mean(mean),l=min(lcl), u=max(ucl))
+agemeans<-out %>%
+  filter(parameter %in% c("mean.p.nonlocal[1]","mean.p.nonlocal[2]")) %>%
+  mutate(Age=as.numeric(substr(parameter,nchar(parameter)-1,nchar(parameter)-1))) %>%
+  mutate(Age=ifelse(Age==1,"Adult","Juvenile"))
+agemeans  
 
 
 ## 3.7. summarise output in graphical form ------------------------------------------
@@ -559,7 +593,7 @@ wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
 
 FIGURE<-out %>%
-  filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib")) %>%
+  filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib","mean.p.nonlocal[1]","mean.p.nonlocal[2]")) %>%
   mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
   mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
   mutate(Canton=readr::parse_number(parameter,locale=locale(grouping_mark=". ", decimal_mark=","))) %>%  ### parse_number doesn't deal with dots: https://stackoverflow.com/questions/61328339/r-parse-number-fails-if-the-string-contains-a-dot
@@ -606,13 +640,19 @@ ggsave(plot=FIGURE,
 
 
 
+# 4. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES
+
+
+
+# evaluate origin feather isotope value from plausible target distributions
+d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
 
 
 
 
-# # 4. Geographic assignment using assignR ----
+# # 5. Geographic assignment using assignR ----
 # 
-# ## 4.1. load shapefile of Switzerland and EUROPE ----
+# ## 5.1. load shapefile of Switzerland and EUROPE ----
 # ### OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
 # 
 # SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
@@ -629,7 +669,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.2. plot the known origin points of WOCO that were sampled ----
+# ## 5.2. plot the known origin points of WOCO that were sampled ----
 # 
 # woco.sf <- ORIG_WC %>%
 #   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
@@ -643,7 +683,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.3. extract isoscape ----
+# ## 5.3. extract isoscape ----
 # 
 # ### this function throws a weird error - downloaded and ran function independently without problem
 # # isoscape <- getIsoscapes(isoType = "GlobalPrecipGS", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
@@ -664,7 +704,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.4. get canned calibration data and calibrate rainwater against feather d2H  ----
+# ## 5.4. get canned calibration data and calibrate rainwater against feather d2H  ----
 # 
 # # data("knownOrig")
 # # knownOrig$sources[1:2]
@@ -691,22 +731,22 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.4.1 building our own equation using the known origin feather samples ----
+# ## 5.4.1 building our own equation using the known origin feather samples ----
 # ## this looks weird like somebody had calculated the dH_reg
 # # summary(lm(dH~dH_reg+AGE, data=ORIG_WC))
 # 
-# ## 4.4.1.1. convert data to SpatVector ------
+# ## 5.4.1.1. convert data to SpatVector ------
 # 
 # woco.vect<-terra::vect(woco.sf)
 # 
 # 
-# ## 4.4.1.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
+# ## 5.4.1.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
 # 
 # woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
 # woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 # 
 # 
-# ## 4.4.1.3. create equation to link rainwater to d2H of feather -------
+# ## 5.4.1.3. create equation to link rainwater to d2H of feather -------
 # ggplot(woco.sf, aes(x=d2h_GS,y=dH_reg, col=AGE, fill=AGE)) +
 #   geom_point() +
 #   geom_smooth(method="lm") +
@@ -732,7 +772,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.4.1.4. apply that equation to all other shot woodcocks -------
+# ## 5.4.1.4. apply that equation to all other shot woodcocks -------
 # woco.unk.sf <- UNK_WC %>%
 #   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 # woco.unk.vect<-terra::vect(woco.unk.sf)
@@ -745,7 +785,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.4.1.5. test whether each shot feather came from within location-specific prediction interval -------
+# ## 5.4.1.5. test whether each shot feather came from within location-specific prediction interval -------
 # 
 # OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
 #   filter(!is.na(dH_reg)) %>%
@@ -761,7 +801,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.5. PRIOR OF DISTRIBUTION  ----
+# ## 5.5. PRIOR OF DISTRIBUTION  ----
 # min(values(isoscape)[,1],na.rm=T)
 # max(values(isoscape)[,1],na.rm=T)
 # distd2H_knownSUI<-hist(ORIG_WC$dH_correct, breaks=seq(-135,-5,5))
@@ -778,7 +818,7 @@ ggsave(plot=FIGURE,
 # 
 # 
 # 
-# ## 4.6. ASSIGNMENT TO ORIGIN  ----
+# ## 5.6. ASSIGNMENT TO ORIGIN  ----
 # ## this is computationally very intensive!!
 # ### because the isotope data are already converted into rainfall isotopes, we do not need the calibrated isoscape
 # origins <- pdRaster(isoscape,
