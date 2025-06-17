@@ -640,12 +640,27 @@ ggsave(plot=FIGURE,
 
 
 
-# 4. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES
+# 4. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES -----------
+
+for (ct in unique()){
+
+  ## get canton-wise distribution
+  cnt.iso <- woco.unk.sf %>% dplyr::filter(KANTON==ct) %>%
+    st_drop_geometry() %>%
+    dplyr::select(ID,KANTON,d2h_GS,d2h_se_GS) %>%
+    rowwise() %>%
+    mutate(pot.orig.d2H=rnorm(1,d2h_GS,d2h_se_GS)) %>%
+    ungroup() %>%
+    group_by(KANTON) %>%
+    summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
+  
+  ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
+  WOCO.isoscape %>% filter(values>cnt.iso$min & values<cnt.iso$max)
 
 
+} #ct
 
-# evaluate origin feather isotope value from plausible target distributions
-d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
+
 
 
 
