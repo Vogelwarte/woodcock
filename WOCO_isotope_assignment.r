@@ -42,11 +42,13 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 filter<-dplyr::filter
 select<-dplyr::select
+library(gridExtra)
+library(tidyterra)
 
 
 ## set root folder for project
-setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
-#setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"),silent=T)
+try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 
 
@@ -136,7 +138,7 @@ woco %>% dplyr::filter(is.na(dH))
 
 ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
   geom_histogram(alpha=0.5,position = position_dodge(width=1))
-ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
+#ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
 
 
 # distd2H_knownSUI<-hist(ORIG_WC$dH, breaks=seq(-130,30,5))
@@ -504,7 +506,7 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
 #help(modelInitialization)
 
 ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
+# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
 
 
 # MCMC settings
@@ -641,12 +643,12 @@ ggsave(plot=FIGURE,
 
 
 # 4. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES -----------
-
-for (ct in unique()){
+plot_list <- list()
+for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 
   ## get canton-wise distribution
-  cnt.iso <- woco.unk.sf %>% dplyr::filter(KANTON==ct) %>%
-    st_drop_geometry() %>%
+  woco.cnt <- woco.unk.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
+  cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
     dplyr::select(ID,KANTON,d2h_GS,d2h_se_GS) %>%
     rowwise() %>%
     mutate(pot.orig.d2H=rnorm(1,d2h_GS,d2h_se_GS)) %>%
@@ -655,15 +657,36 @@ for (ct in unique()){
     summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
   
   ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
-  WOCO.isoscape %>% filter(values>cnt.iso$min & values<cnt.iso$max)
-
+  CNT.isoscape <- ifel(WOCO.isoscape >= cnt.iso$min & WOCO.isoscape <= cnt.iso$max, 1, 0)
+  
+  ## create plot
+  plot_list[[ct]] <- ggplot(EUR) +
+    geom_sf() +
+    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h))+
+    geom_sf(data=woco.cnt,color="red") +
+    geom_sf(data=EUR, colour="grey12", fill=NA) +
+    #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
+    
+    annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
+    annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
+    scale_fill_gradient(low = 'lightgray', high = 'lightgreen', na.value=NA) +
+    
+    ## beautification of the axes
+    theme(panel.background=element_rect(fill="white", colour="black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text=element_text(size=12, color="black"),
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin= unit(rep(.5, 4), "lines"),
+          strip.text=element_text(size=18, color="black"),
+          strip.background=element_rect(fill="white", colour="black"))
 
 } #ct
 
-
-
-
-
+grid.arrange(grobs=plot_list,ncol=2)
+ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
+       device="jpg",width=8, height=12)
 
 # # 5. Geographic assignment using assignR ----
 # 
