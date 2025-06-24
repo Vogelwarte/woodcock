@@ -21,6 +21,9 @@
 # Elli: get Swiss high resolution isotope data and create calibration for rainwater-feather isotope ratios based on actual local simultaneous measurements. This calibration then cannot be used outside of Switzerland, so only purpose would be to show potential differences in calibration?
 # Urs: provide overall mean probability 
 
+## 
+
+
 rm(list=ls())
 library(data.table)
 library(dplyr)
@@ -152,9 +155,13 @@ ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
 ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
   dplyr::filter(!is.na(dH)) %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
-UNK_WC<-woco %>% filter(ORIGINE=="UNBEKANNT") %>%
+UNK_WC<-woco %>% dplyr::filter(ORIGINE=="UNBEKANNT") %>%
+  dplyr::filter(JAGDT==1) %>%
+  dplyr::filter(!is.na(DATE)) %>%
   dplyr::filter(!is.na(dH)) %>%
-  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
+  mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+  rename(DATE=Date)
 UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
 dim(ORIG_WC)
 dim(UNK_WC)
@@ -342,6 +349,65 @@ woco.unk.sf %>% filter(is.na(AGE))
 # OUT_SUMMARY
 # 
 # #fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
+
+
+
+
+## 2.5. include phenology data to integrate probability of non-local origin based on date a bird was shot -------
+
+
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds") %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  mutate(prop.remain=1-prop_mig) %>% 
+  group_by(week, Date) %>%
+  summarise(mig=quantile(prop.remain,0.5),mig.lcl=quantile(prop.remain,0.025),mig.ucl=quantile(prop.remain,0.975))
+
+woco_abundance<-fread("data/AnnualPhenology_abundance_index.csv") %>%
+  mutate(Date=lubridate::ymd("2023-12-27") + lubridate::days(Pentade*5)) %>%
+  mutate(abund=SOPM/max(SOPM)) %>%
+  dplyr::filter(Date>=min(woco_mig$Date))
+
+shot_dates<-hist(lubridate::yday(UNK_WC$DATE), breaks=seq(250,365,7),plot=F)
+woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
+  mutate(Date=parse_date_time(as.integer(yday), orders="j")) %>%
+  mutate(abund=N/max(N)) %>%
+  mutate(Date=as.Date(Date-years(1)))
+
+## draw a plot ##
+colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
+
+  
+FIG_s3<-ggplot()+
+  geom_line(data=woco_mig, aes(x=Date, y=mig, color="Local birds"),linewidth=1) +
+  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="All birds"),linewidth=1) +
+  geom_col(data=woco_shot, aes(x=Date, y=abund, color="Shot birds"),width = 6, alpha=0.5) +
+  labs(color = "Origin") +
+  scale_color_manual(values = colors) +
+  
+  ## format axis ticks
+  scale_x_date(name="Date", date_labels = "%d %b") +
+  scale_y_continuous(name="Relative abundance of woodcocks", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=16, color="black"),
+        legend.text=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.1,0.5),
+        strip.background=element_rect(fill="white", colour="black"))
+FIG_s3
+
+ggsave(plot=FIG_s3,
+       filename="output/woco_phenology_comparison.jpg", 
+       device="jpg",width=11, height=8)
+
 
 
 
@@ -896,4 +962,69 @@ ggsave(filename="output/woco_iso_origin_local_maps.jpg",
 # ggplot(UNK_WC, aes(x=Swissorigin_prob,y=dH_correct, col=AGE)) +
 #   geom_point()
 # 
+
+
+############# TEMPLATE CODE PROVIDED BY COPILOT FOR COMBINING BOTH TIME AND d2H IN ASSIGNMENT PROBABILITY ##########
+
+library(nimble)
+
+# Define the model
+code <- nimbleCode({
+  # Prior for class membership
+  z ~ dcat(pi[1:2])  # z = 1 for A, z = 2 for B
+  
+  # Priors for class probabilities
+  pi[1] <- 0.5
+  pi[2] <- 0.5
+  
+  # Conditional distributions
+  d2H ~ dnorm(mu_d2H[z], sd = sigma_d2H[z])
+  time ~ dcustom(time_likelihood(time, z))
+})
+
+# Custom likelihood for time variable
+time_likelihood <- nimbleFunction(
+  run = function(x = double(0), z = integer(0)) {
+    returnType(double(0))
+    if (z == 1) {
+      # Logistic distribution for Population A
+      mu <- 0
+      s <- 1
+      loglik <- -x + 2 * log(1 / (1 + exp(-x)))
+    } else {
+      # Inverse distribution for Population B (e.g., 1/x)
+      if (x <= 0) return(-1e6)  # Penalize invalid values
+      loglik <- -log(x^2)
+    }
+    return(loglik)
+  }
+)
+
+# Constants and data
+constants <- list(
+  mu_d2H = c(-50, -100),
+  sigma_d2H = c(10, 15)
+)
+
+# Example data point
+data <- list(
+  d2H = -60,
+  time = 2
+)
+
+# Initial values
+inits <- list(z = 1)
+
+# Build and compile the model
+model <- nimbleModel(code, constants = constants, data = data, inits = inits)
+cmodel <- compileNimble(model)
+
+# Configure and run MCMC
+conf <- configureMCMC(model, monitors = "z")
+mcmc <- buildMCMC(conf)
+cmcmc <- compileNimble(mcmc, project = model)
+samples <- runMCMC(cmcmc, niter = 1000)
+
+# Posterior probability of class membership
+table(samples) / length(samples)
 
