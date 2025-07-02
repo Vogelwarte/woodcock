@@ -167,6 +167,26 @@ dim(ORIG_WC)
 dim(UNK_WC)
 
 
+## 1.5. EXTRACT GROWTH SEASON RAIN ISOTOPES ----
+## sampled feathers are the first secondary in shot birds and greater coverts in live birds
+## according to Glutz von Blotzheim adults moult after June until Sept, and juveniles can moult part of their wing coverts and secondaries in Aug/Sept
+
+rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
+  mutate(sd=parse_date_time(DATE, orders="dmy")) %>%
+  mutate(feather_growth_date=if_else(AGE=="Adulte",
+                                      if_else(month(sd)<7,
+                                              ymd(paste(year(sd)-1,"-06-15")),
+                                     ymd(paste(year(sd),"-06-15"))),
+                                     if_else(month(sd)<9,
+                                             ymd(paste(year(sd)-1,"-05-15")),
+                                             ymd(paste(year(sd),"-08-15"))))) %>%
+  mutate(feather_sampling_date=as.Date(sd)) %>%
+  dplyr::select(-DATE,-sd,-AGE)
+    
+fwrite(rain_orig_wc,"data/woodcock_known_origin_samples.csv")
+
+
+
 ## report numbers in manuscript
 table(ORIG_WC$AGE)
 length(UNK_WC$dH)
