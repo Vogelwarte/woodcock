@@ -21,7 +21,8 @@
 # Elli: get Swiss high resolution isotope data and create calibration for rainwater-feather isotope ratios based on actual local simultaneous measurements. This calibration then cannot be used outside of Switzerland, so only purpose would be to show potential differences in calibration?
 # Urs: provide overall mean probability 
 
-## 
+## UPDATE 3 July 2025:
+## tried to add a time distribution for monitoring data
 
 
 rm(list=ls())
@@ -183,7 +184,7 @@ rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
   mutate(feather_sampling_date=as.Date(sd)) %>%
   dplyr::select(-DATE,-sd,-AGE)
     
-fwrite(rain_orig_wc,"data/woodcock_known_origin_samples.csv")
+#fwrite(rain_orig_wc,"data/woodcock_known_origin_samples.csv")
 
 
 
@@ -375,7 +376,6 @@ woco.unk.sf %>% filter(is.na(AGE))
 
 ## 2.5. include phenology data to integrate probability of non-local origin based on date a bird was shot -------
 
-
 woco_mig<-readRDS("output/woco_mig_depart_simulation.rds") %>%
   mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
   mutate(prop.remain=1-prop_mig) %>% 
@@ -424,9 +424,9 @@ FIG_s3<-ggplot()+
         strip.background=element_rect(fill="white", colour="black"))
 FIG_s3
 
-ggsave(plot=FIG_s3,
-       filename="output/woco_phenology_comparison.jpg", 
-       device="jpg",width=11, height=8)
+# ggsave(plot=FIG_s3,
+#        filename="output/woco_phenology_comparison.jpg", 
+#        device="jpg",width=11, height=8)
 
 
 
@@ -464,8 +464,34 @@ woco.orig.model<-nimbleCode({
   b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
   b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
   sigma.calib ~ dunif(0,20) # standard deviation
-      
-      
+  
+  
+  
+  # # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # # TIME DISTRIBUTION FOR OVERALL ABUNDANCE
+  # # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # # negative binomial distribution:  
+  # for (i in 1:n.count.weeks){
+  #   abund.known[i] ~ dnegbin(mu.abd.known[i], r.abd)
+  #   mu.abd.known[i] <- int.abd + b.countday*count.day[i] + b2.countday*count.day.sq[i]
+  # }
+  # 
+  # # Priors not informed by anything
+  # int.abd ~ dnorm(0.2, sd=5) # uninformative prior
+  # b.countday ~ dnorm(1, sd=5) # uninformative prior
+  # b2.countday ~ dnorm(1, sd=5) # uninformative prior for quadratic effect
+  # r.abd ~ dgamma(0.01,0.01) # dispersion parameter for neg bin distribution
+  
+  
+  # # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # # PROBABILITY DISTRIBUTION FROM DEPARTURE MODEL
+  # # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # for (t in 1:(nweeks)){
+  #   logit.mig[t] <- lm.mean +      ### intercept from migration model
+  #     b.mig.week*(week[t])     ### week effect from migration model
+  #   mig.prob[t] <-ilogit(logit.mig[t])
+  # }    
+  #     
 
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -478,11 +504,11 @@ woco.orig.model<-nimbleCode({
   } #a
 
   
-  #### OVERALL PRIOR PROBABILITY OF NON-LOCAL ORIGIN
+  #### OVERALL PRIOR PROBABILITY OF NON-LOCAL ORIGIN AND DERIVED PROBABILITY
   #for (ct in 1:ncanton){
     for (a in 1:2){
-      mean.p.nonlocal[a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
-      logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal[a] / (1-mean.p.nonlocal[a]))
+      mean.p.nonlocal.iso[a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
+      logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal.iso[a] / (1-mean.p.nonlocal.iso[a]))
     } #a
   #} #ct
   
@@ -492,7 +518,7 @@ woco.orig.model<-nimbleCode({
   for (ct in 1:ncanton){
     for (a in 1:2){
       logit.p.nonlocal[ct,a] <- logit.mean.p.nonlocal[a] + cant.reff[ct]  ##  combination of overall mean and random effect
-      p.nonlocal[ct,a]<-ilogit(logit.p.nonlocal[ct,a])
+      p.nonlocal.iso[ct,a]<-ilogit(logit.p.nonlocal[ct,a])
     } #a
   } #ct
   
@@ -503,16 +529,60 @@ woco.orig.model<-nimbleCode({
   
   for (i in 1:nind.unkn){
     
-    # Latent indicator 
-    z[i] ~ dbern(p.nonlocal[canton[i],age.unknown[i]+1])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
+    # Latent indicator for isotope distribution
+    z[i] ~ dbern(p.nonlocal.iso[canton[i],age.unknown[i]+1])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
     
-    # Potential local distribution
+    # Potential local distribution based on isotope ratio
     mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
-    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]
+    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]  ### local expected feather isotope distribution
 
     # evaluate origin feather isotope value from plausible target distributions
     d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
+    
+    # Potential local distribution based on timing
+    # logit.mig.unknown[i,2] <- int.abd + b.countday*unk.day[i] + b2.countday*unk.day.sq[i]    ### overall abundance distribution from abundance data
+    # mig.prob[i,2] <-ilogit(abd.unknown[i,2])   ### predicted probability from departure model
+    logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
+      b.mig.week*(unk.week[i])     ### week effect from migration model
+
+    
+    # combine the probabilities of migration and isotope into a single probability
+    #unk.day[i] ~ dbern(mig.prob[i,z[i] + 1])
+    p.nonlocal.ind[i] <-ilogit(logit.mig.unknown[i] + logit.p.nonlocal[canton[i],age.unknown[i]+1]) ### predicted probability from departure model
+    
+    
+    
+    #### CALCULATE SUMS PER AGE AND CANTON FOR DERIVED MEAN PROBABILITY ######
+    
+    for (a in 1:2){
+      
+      age.count[i,a] <- equals(age.unknown[i], a-1)
+      age.sum.p[i,a] <- p.nonlocal.ind[i] * age.count[i,a]
+      
+      for (ct in 1:ncanton){
+        
+        is_canton[i,a,ct] <- equals(canton[i], ct)
+        ct.sum.p[i,a,ct] <- p.nonlocal.ind[i] * ct.count[i,a,ct]
+        ct.count[i,a,ct] <- (age.count[i,a] * is_canton[i, a,ct])
+        
+        
+      } #ct
+    } #a
+    
   } #i
+  
+  
+  #### DERIVED OVERALL PROBABILITY BY AGE CLASS AND CANTON
+  
+    for (a in 1:2){
+      mean.p.nonlocal[a]<-sum(age.sum.p[1:nind.unkn,a]) / sum(age.count[1:nind.unkn,a])
+  
+      for (ct in 1:ncanton){
+      p.nonlocal[ct,a]<-sum(ct.sum.p[1:nind.unkn,a,ct]) / sum(ct.count[1:nind.unkn,a,ct])
+
+    } #ct
+  } #a
+
 }) ## end of nimble code chunk
 
 
@@ -543,13 +613,21 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       sd.rain.d2H = sd.rain.d2H,
                       d2H_rain.known=woco.sf$d2h_GS,
                       d2H_rain.unknown=woco.unk.sf$d2h_GS,
+                      ncanton=length(unique(woco.unk.sf$KANTON)),
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
                       canton = as.numeric(as.factor(woco.unk.sf$KANTON)),
-                      ncanton=length(unique(woco.unk.sf$KANTON))
+                      lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
+                      b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
+                      #unk.day=yday(UNK_WC$DATE),
+                      unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
+                      #count.day=yday(woco_abundance$Date),
+                      #count.day.sq=yday(woco_abundance$Date)^2,
+                      #n.count.weeks=length(woco_abundance$SOPM)
                       )
 
 iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
+                 #abund.known=woco_abundance$SOPM,
                  d2H_feather.unknown = woco.unk.sf$dH)
 
 
@@ -558,7 +636,8 @@ iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
 ## 3.3. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib")
+parameters.iso <- c("mean.p.nonlocal","p.nonlocal","p.nonlocal.iso","b.rain","b.age","int.rain","sigma.calib")
+                    #"int.abd","b.countday","b2.countday","r.abd")
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -569,8 +648,14 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
                   b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
                   sigma.calib = runif(1,0,20), # standard deviation
                   
+                  ## INITS FOR ABUNDANCE REGRESSION
+                  # int.abd = rnorm(1,0.2, sd=5), # uninformative prior
+                  # b.countday = rnorm(1,1, sd=5), # uninformative prior
+                  # b2.countday = rnorm(1,1, sd=5), # uninformative prior for quadratic effect
+                  # r.abd  = rgamma(1,0.01,0.01), # dispersion parameter for neg bin distribution
+                  
                   #### FLAT PRIOR PROBABILITY FOR BEING LOCAL BIRD
-                  mean.p.nonlocal=rbeta(2,2,4.5),  ###  hist(rbeta(1000,2,4.5))
+                  mean.p.nonlocal.iso=rbeta(2,2,4.5),  ###  hist(rbeta(1000,2,4.5))
                   cant.reff=rnorm(iso.constants$ncanton,0,1)
                   #p.loc=matrix(rbeta(length(unique(woco.unk.sf$KANTON))*2,2,4.5),ncol=2)  ###  hist(rbeta(1000,2,4.5))
 )
@@ -632,7 +717,7 @@ saveRDS(woco.iso,"output/woco_iso_origin_model.rds")
 
 ## 3.5. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib", "p.nonlocal.COMBINED"))) #"int.abd","b.countday","b2.countday","r.abd")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
