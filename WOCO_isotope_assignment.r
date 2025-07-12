@@ -504,7 +504,7 @@ woco.orig.model<-nimbleCode({
   } #a
 
   
-  #### OVERALL PRIOR PROBABILITY OF NON-LOCAL ORIGIN AND DERIVED PROBABILITY
+  #### OVERALL PRIOR PROBABILITY OF NON-LOCAL ORIGIN BASED ON AGE CLASS
   #for (ct in 1:ncanton){
     for (a in 1:2){
       mean.p.nonlocal.iso[a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
@@ -514,13 +514,13 @@ woco.orig.model<-nimbleCode({
   
   
   #### LINEAR PREDICTOR OF AGE AND CANTON-SPECIFIC PROBABILITY OF NON-LOCAL ORIGIN
-  
-  for (ct in 1:ncanton){
-    for (a in 1:2){
-      logit.p.nonlocal[ct,a] <- logit.mean.p.nonlocal[a] + cant.reff[ct]  ##  combination of overall mean and random effect
-      p.nonlocal.iso[ct,a]<-ilogit(logit.p.nonlocal[ct,a])
-    } #a
-  } #ct
+  # moved to individual loop below
+  # for (ct in 1:ncanton){
+  #   for (a in 1:2){
+  #     logit.p.nonlocal[ct,a] <- logit.mean.p.nonlocal[a] + cant.reff[ct]  ##  combination of overall mean and random effect
+  #     p.nonlocal.iso[ct,a]<-ilogit(logit.p.nonlocal[ct,a])
+  #   } #a
+  # } #ct
   
   
   # Likelihood 
@@ -529,8 +529,12 @@ woco.orig.model<-nimbleCode({
   
   for (i in 1:nind.unkn){
     
+    # linear predictor of isotope non-local probability
+    logit.p.nonlocal.iso[i] <- logit.mean.p.nonlocal[age.unknown[i]+1] + cant.reff[canton[i]]  ##  combination of overall mean and random effect
+    p.nonlocal.iso[i]<-ilogit(logit.p.nonlocal.iso[i])
+    
     # Latent indicator for isotope distribution
-    z[i] ~ dbern(p.nonlocal.iso[canton[i],age.unknown[i]+1])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
+    z[i] ~ dbern(p.nonlocal.iso[i])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
     
     # Potential local distribution based on isotope ratio
     mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
@@ -544,12 +548,20 @@ woco.orig.model<-nimbleCode({
     # mig.prob[i,2] <-ilogit(abd.unknown[i,2])   ### predicted probability from departure model
     logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
       b.mig.week*(unk.week[i])     ### week effect from migration model
+    p.nonlocal.time[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from departure model
 
     
-    # combine the probabilities of migration and isotope into a single probability
-    #unk.day[i] ~ dbern(mig.prob[i,z[i] + 1])
-    p.nonlocal.ind[i] <-ilogit(logit.mig.unknown[i] + logit.p.nonlocal[canton[i],age.unknown[i]+1]) ### predicted probability from departure model
+    # combine the probabilities of migration and isotope into a single probability using log odds
+    # Convert each probability to odds:
+    odds_iso[i] <- p.nonlocal.iso[i] / (1 - p.nonlocal.iso[i])
+    odds_time[i] <- p.nonlocal.time[i]  / (1 - p.nonlocal.time[i] )
     
+    # Combine odds
+    combined_odds[i] <- odds_iso[i] * odds_time[i]
+    
+    # Convert back to probability
+    p.nonlocal[i] <- combined_odds[i] / (1 + combined_odds[i])
+
     
     
     #### CALCULATE SUMS PER AGE AND CANTON FOR DERIVED MEAN PROBABILITY ######
@@ -557,14 +569,13 @@ woco.orig.model<-nimbleCode({
     for (a in 1:2){
       
       age.count[i,a] <- equals(age.unknown[i], a-1)
-      age.sum.p[i,a] <- p.nonlocal.ind[i] * age.count[i,a]
+      age.sum.p[i,a] <- p.nonlocal[i] * age.count[i,a]
       
       for (ct in 1:ncanton){
         
         is_canton[i,a,ct] <- equals(canton[i], ct)
-        ct.sum.p[i,a,ct] <- p.nonlocal.ind[i] * ct.count[i,a,ct]
+        ct.sum.p[i,a,ct] <- p.nonlocal[i] * ct.count[i,a,ct]
         ct.count[i,a,ct] <- (age.count[i,a] * is_canton[i, a,ct])
-        
         
       } #ct
     } #a
@@ -636,7 +647,7 @@ iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
 ## 3.3. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("mean.p.nonlocal","p.nonlocal","p.nonlocal.iso","b.rain","b.age","int.rain","sigma.calib")
+parameters.iso <- c("mean.p.nonlocal","p.nonlocal","p.nonlocal.iso","p.nonlocal.time","b.rain","b.age","int.rain","sigma.calib")
                     #"int.abd","b.countday","b2.countday","r.abd")
 
 # Initial values  FOR ALL PARAMETERS
@@ -717,7 +728,7 @@ saveRDS(woco.iso,"output/woco_iso_origin_model.rds")
 
 ## 3.5. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib", "p.nonlocal.COMBINED"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib"))) #"int.abd","b.countday","b2.countday","r.abd")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -726,7 +737,7 @@ fwrite(out,"output/woco_iso_origin_parm_estimates.csv")
 #out<-fread("output/woco_iso_origin_parm_estimates.csv")
 
 
-MCMCplot(woco.iso$samples, params=c("p.nonlocal"))
+MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))
 
 
 ## look at the chains and whether they mixed well
