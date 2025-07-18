@@ -257,7 +257,8 @@ forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
 forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
 
 ## create forest raster layer
-globcover<-terra::rast("S:/rasters/landuse/world/globcover2009.tif") %>%
+#globcover<-terra::rast("S:/rasters/landuse/world/globcover2009.tif") %>%
+globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
   crop(woco.countries) %>%
   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
   terra::project(.,crs(isoscape))
@@ -564,35 +565,36 @@ woco.orig.model<-nimbleCode({
 
     
     
-    #### CALCULATE SUMS PER AGE AND CANTON FOR DERIVED MEAN PROBABILITY ######
-    
-    for (a in 1:2){
-      
-      age.count[i,a] <- equals(age.unknown[i], a-1)
-      age.sum.p[i,a] <- p.nonlocal[i] * age.count[i,a]
-      
-      for (ct in 1:ncanton){
-        
-        is_canton[i,a,ct] <- equals(canton[i], ct)
-        ct.sum.p[i,a,ct] <- p.nonlocal[i] * ct.count[i,a,ct]
-        ct.count[i,a,ct] <- (age.count[i,a] * is_canton[i, a,ct])
-        
-      } #ct
-    } #a
+    # #### CALCULATE SUMS PER AGE AND CANTON FOR DERIVED MEAN PROBABILITY ######
+    # 
+    # for (a in 1:2){
+    #   
+    #   age.count[i,a] <- equals(age.unknown[i], a-1)
+    #   age.sum.p[i,a] <- p.nonlocal[i] * age.count[i,a]
+    #   
+    #   for (ct in 1:ncanton){
+    #     
+    #     is_canton[i,a,ct] <- equals(canton[i], ct)
+    #     ct.sum.p[i,a,ct] <- p.nonlocal[i] * ct.count[i,a,ct]
+    #     ct.count[i,a,ct] <- (age.count[i,a] * is_canton[i, a,ct])
+    #     
+    #   } #ct
+    # } #a
     
   } #i
   
   
-  #### DERIVED OVERALL PROBABILITY BY AGE CLASS AND CANTON
-  
-    for (a in 1:2){
-      mean.p.nonlocal[a]<-sum(age.sum.p[1:nind.unkn,a]) / sum(age.count[1:nind.unkn,a])
-  
-      for (ct in 1:ncanton){
-      p.nonlocal[ct,a]<-sum(ct.sum.p[1:nind.unkn,a,ct]) / sum(ct.count[1:nind.unkn,a,ct])
-
-    } #ct
-  } #a
+  # #### DERIVED OVERALL PROBABILITY BY AGE CLASS AND CANTON
+  # this does not work in Nimble because it cannot sum across indices
+  # 
+  # for (a in 1:2){
+  #   mean.p.nonlocal[a]<-sum(age.sum.p[1:nind.unkn,a]) / sum(age.count[1:nind.unkn,a])
+  #   
+  #   for (ct in 1:ncanton){
+  #     p.nonlocal[ct,a]<-sum(ct.sum.p[1:nind.unkn,a,ct]) / sum(ct.count[1:nind.unkn,a,ct])
+  #     
+  #   } #ct
+  # } #a
 
 }) ## end of nimble code chunk
 
@@ -647,8 +649,8 @@ iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
 ## 3.3. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("mean.p.nonlocal","p.nonlocal","p.nonlocal.iso","p.nonlocal.time","b.rain","b.age","int.rain","sigma.calib")
-                    #"int.abd","b.countday","b2.countday","r.abd")
+parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","p.nonlocal","p.nonlocal.iso","p.nonlocal.time")
+                    #"int.abd","b.countday","b2.countday","r.abd","mean.p.nonlocal","p.nonlocal",)
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -728,7 +730,7 @@ saveRDS(woco.iso,"output/woco_iso_origin_model.rds")
 
 ## 3.5. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("mean.p.nonlocal","p.nonlocal","b.rain","b.age","int.rain","sigma.calib"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal","b.rain","b.age","int.rain","sigma.calib"))) #"int.abd","b.countday","b2.countday","r.abd")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -737,12 +739,99 @@ fwrite(out,"output/woco_iso_origin_parm_estimates.csv")
 #out<-fread("output/woco_iso_origin_parm_estimates.csv")
 
 
-MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))
+#MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))
 
 
 ## look at the chains and whether they mixed well
 chainsPlot(woco.iso$samples,
            var=c("b.rain","b.age","int.rain","sigma.calib"))
+
+
+
+## 3.5.1 summarise probabilities across individuals ------------------------------------------
+
+# compile all the samples
+samples <- rbind(woco.iso$samples$chain1,woco.iso$samples$chain2,woco.iso$samples$chain3,woco.iso$samples$chain4)
+mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal", colnames(samples))]) %>%
+  gather(key="parameter",value="p.nonlocal") %>%
+  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=iso.constants$canton[ind]) 
+
+
+mean.p.nonlocal %>%
+  group_by(age,ctn) %>%
+  summarise(for.med=median(p.nonlocal),for.ucl=quantile(p.nonlocal,0.025), for.lcl=quantile(p.nonlocal,0.975)) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  
+  ## format axis ticks
+  labs(y="Prop. of shot woodcock that are not local",x="Swiss Canton",col="") +
+  scale_x_continuous(limits=c(0.5,6.5), breaks=c(1:6), labels=levels(as.factor(woco.unk.sf$KANTON))) +
+  # scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
+  # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
+  # 
+  ### add the bird icons
+  annotation_custom(gunicon, xmin=5.2, xmax=5.8, ymin=0.88, ymax=0.96)+
+  annotation_custom(wocoicon, xmin=5.5, xmax=6.9, ymin=0.85, ymax=1.02)+
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.75,0.15),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+
+
+
+## 3.5.2 compare probabilities between isotope and time ------------------------------------------
+
+
+p.comp<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal.iso","p.nonlocal.time")))
+p.comp$parameter<-row.names(p.comp)
+names(p.comp)[c(3,4,5)]<-c('lcl','median', 'ucl')
+p.comp<- p.comp %>% mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=iso.constants$canton[ind]) %>%
+  mutate(info=if_else(grepl("time", parameter)==T,"time","isotope")) %>%
+  select(ind,age,ctn,info,median) %>%
+  pivot_wider(.,names_from = info,values_from = median)
+
+p.comp %>% 
+ggplot(aes(x=isotope, y=time,col=as.factor(ctn)))+
+  geom_point(size=4)+
+  
+  ## format axis ticks
+  xlab("p.nonlocal isotope")+
+  ylab("p.nonlocal time") +
+  scale_x_continuous(limits=c(0,1)) +
+  scale_y_continuous(limits=c(0,1)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text=element_text(size=18, color="black"),
+        axis.title=element_text(size=18), 
+        strip.text.x=element_text(size=18, color="black"),
+        strip.text.y=element_text(size=18, color="black"),
+        axis.title.y=element_text(margin=margin(0,20,0,0)), 
+        strip.background=element_rect(fill="white", colour="black"))
+
 
 
 
