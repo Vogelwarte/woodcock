@@ -761,9 +761,12 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal", colnames(samples))]) %>
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) 
 
+hist(mean.p.nonlocal$p.nonlocal)
+
+
+
 
 ## 3.5.2 compare probabilities between isotope and time ------------------------------------------
-
 
 p.comp<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal.iso","p.nonlocal.time")))
 p.comp$parameter<-row.names(p.comp)
@@ -775,9 +778,11 @@ p.comp<- p.comp %>% mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))
   select(ind,age,ctn,info,median) %>%
   pivot_wider(.,names_from = info,values_from = median)
 
+
+## plot the probabilities
 p.comp %>% 
-ggplot(aes(x=isotope, y=time,col=as.factor(ctn)))+
-  geom_point(size=4)+
+ggplot(aes(x=isotope, y=time,col=ctn))+
+  geom_point(size=1)+
   
   ## format axis ticks
   xlab("p.nonlocal isotope")+
