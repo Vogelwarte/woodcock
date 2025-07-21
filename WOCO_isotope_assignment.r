@@ -500,18 +500,18 @@ woco.orig.model<-nimbleCode({
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   #### RANDOM EFFECT FOR EACH CANTON
-  for (ct in 1:ncanton){
-    cant.reff[ct] ~ dnorm(0,sd=1)   ##  random normal effect centred on zero to get canton-specific probabilities
-  } #a
+  # for (ct in 1:ncanton){
+  #   cant.reff[ct] ~ dnorm(0,sd=1)   ##  random normal effect centred on zero to get canton-specific probabilities
+  # } #a
 
   
   #### OVERALL PRIOR PROBABILITY OF NON-LOCAL ORIGIN BASED ON AGE CLASS
-  #for (ct in 1:ncanton){
-    for (a in 1:2){
-      mean.p.nonlocal.iso[a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
-      logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal.iso[a] / (1-mean.p.nonlocal.iso[a]))
-    } #a
-  #} #ct
+  # #for (ct in 1:ncanton){
+  #   for (a in 1:2){
+  #     mean.p.nonlocal.iso[a] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
+  #     logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal.iso[a] / (1-mean.p.nonlocal.iso[a]))
+  #   } #a
+  # #} #ct
   
   
   #### LINEAR PREDICTOR OF AGE AND CANTON-SPECIFIC PROBABILITY OF NON-LOCAL ORIGIN
@@ -531,8 +531,11 @@ woco.orig.model<-nimbleCode({
   for (i in 1:nind.unkn){
     
     # linear predictor of isotope non-local probability
-    logit.p.nonlocal.iso[i] <- logit.mean.p.nonlocal[age.unknown[i]+1] + cant.reff[canton[i]]  ##  combination of overall mean and random effect
-    p.nonlocal.iso[i]<-ilogit(logit.p.nonlocal.iso[i])
+    p.nonlocal.iso[i] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
+    # logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal.iso[a] / (1-mean.p.nonlocal.iso[a]))
+    # 
+    # logit.p.nonlocal.iso[i] <- logit.mean.p.nonlocal[age.unknown[i]+1] + cant.reff[canton[i]]  ##  combination of overall mean and random effect
+    # p.nonlocal.iso[i]<-ilogit(logit.p.nonlocal.iso[i])
     
     # Latent indicator for isotope distribution
     z[i] ~ dbern(p.nonlocal.iso[i])  ## age is specified as 0 and 1 in data, need to add 1 for index to work
@@ -626,10 +629,10 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       sd.rain.d2H = sd.rain.d2H,
                       d2H_rain.known=woco.sf$d2h_GS,
                       d2H_rain.unknown=woco.unk.sf$d2h_GS,
-                      ncanton=length(unique(woco.unk.sf$KANTON)),
+                      #ncanton=length(unique(woco.unk.sf$KANTON)),
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
-                      canton = as.numeric(as.factor(woco.unk.sf$KANTON)),
+                      #canton = as.numeric(as.factor(woco.unk.sf$KANTON)),
                       lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
                       b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
                       #unk.day=yday(UNK_WC$DATE),
@@ -668,8 +671,8 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
                   # r.abd  = rgamma(1,0.01,0.01), # dispersion parameter for neg bin distribution
                   
                   #### FLAT PRIOR PROBABILITY FOR BEING LOCAL BIRD
-                  mean.p.nonlocal.iso=rbeta(2,2,4.5),  ###  hist(rbeta(1000,2,4.5))
-                  cant.reff=rnorm(iso.constants$ncanton,0,1)
+                  p.nonlocal.iso=runif(dim(woco.unk.sf)[1],0,1)  ###  hist(rbeta(1000,2,4.5))
+                  #cant.reff=rnorm(iso.constants$ncanton,0,1)
                   #p.loc=matrix(rbeta(length(unique(woco.unk.sf$KANTON))*2,2,4.5),ncol=2)  ###  hist(rbeta(1000,2,4.5))
 )
 
@@ -756,48 +759,7 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal", colnames(samples))]) %>
   gather(key="parameter",value="p.nonlocal") %>%
   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
   mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=iso.constants$canton[ind]) 
-
-
-mean.p.nonlocal %>%
-  group_by(age,ctn) %>%
-  summarise(for.med=median(p.nonlocal),for.ucl=quantile(p.nonlocal,0.025), for.lcl=quantile(p.nonlocal,0.975)) %>%
-  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
-  
-  ggplot(aes(x=ctn, y=for.med))+
-  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
-  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  
-  ## format axis ticks
-  labs(y="Prop. of shot woodcock that are not local",x="Swiss Canton",col="") +
-  scale_x_continuous(limits=c(0.5,6.5), breaks=c(1:6), labels=levels(as.factor(woco.unk.sf$KANTON))) +
-  # scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
-  # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
-  # 
-  ### add the bird icons
-  annotation_custom(gunicon, xmin=5.2, xmax=5.8, ymin=0.88, ymax=0.96)+
-  annotation_custom(wocoicon, xmin=5.5, xmax=6.9, ymin=0.85, ymax=1.02)+
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=14, color="black"),
-        axis.text.x=element_text(size=14, color="black"),
-        axis.title=element_text(size=16),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=14, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.75,0.15),
-        strip.text=element_text(size=18, color="black"),
-        strip.background=element_rect(fill="white", colour="black"))
-
+  mutate(ctn=woco.unk.sf$KANTON[ind]) 
 
 
 ## 3.5.2 compare probabilities between isotope and time ------------------------------------------
@@ -808,7 +770,7 @@ p.comp$parameter<-row.names(p.comp)
 names(p.comp)[c(3,4,5)]<-c('lcl','median', 'ucl')
 p.comp<- p.comp %>% mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
   mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=iso.constants$canton[ind]) %>%
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(info=if_else(grepl("time", parameter)==T,"time","isotope")) %>%
   select(ind,age,ctn,info,median) %>%
   pivot_wider(.,names_from = info,values_from = median)
@@ -865,21 +827,23 @@ imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fu
 wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
 
-FIGURE<-out %>%
-  filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib","mean.p.nonlocal[1]","mean.p.nonlocal[2]")) %>%
-  mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
-  mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
-  mutate(Canton=readr::parse_number(parameter,locale=locale(grouping_mark=". ", decimal_mark=","))) %>%  ### parse_number doesn't deal with dots: https://stackoverflow.com/questions/61328339/r-parse-number-fails-if-the-string-contains-a-dot
-  mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[Canton]) %>%
-  mutate(for.med=(median),for.ucl=lcl, for.lcl=ucl) %>%
+FIGURE<-mean.p.nonlocal %>%
+  group_by(age,ctn,ind) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn) %>%
+  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
   
-  ggplot(aes(x=Canton, y=for.med))+
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
   
   ## format axis ticks
   labs(y="Prop. of shot woodcock that are not local",x="Swiss Canton",col="") +
-  scale_x_continuous(limits=c(0.5,6.5), breaks=c(1:6), labels=levels(as.factor(woco.unk.sf$KANTON))) +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
   # scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
   # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
   # 
@@ -902,15 +866,62 @@ FIGURE<-out %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.75,0.15),
+        legend.position.inside=c(0.65,0.85),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE
 
 ggsave(plot=FIGURE,
-       filename="output/woco_iso_origin_probability_estimates.jpg", 
+       filename="output/woco_iso_time_origin_probability_estimates.jpg", 
        device="jpg",width=11, height=8)
 
+
+# FIGURE<-out %>%
+#   filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib","mean.p.nonlocal[1]","mean.p.nonlocal[2]")) %>%
+#   mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
+#   mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
+#   mutate(Canton=readr::parse_number(parameter,locale=locale(grouping_mark=". ", decimal_mark=","))) %>%  ### parse_number doesn't deal with dots: https://stackoverflow.com/questions/61328339/r-parse-number-fails-if-the-string-contains-a-dot
+#   mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[Canton]) %>%
+#   mutate(for.med=(median),for.ucl=lcl, for.lcl=ucl) %>%
+#   
+#   ggplot(aes(x=Canton, y=for.med))+
+#   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+#   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+#   
+#   ## format axis ticks
+#   labs(y="Prop. of shot woodcock that are not local",x="Swiss Canton",col="") +
+#   scale_x_continuous(limits=c(0.5,6.5), breaks=c(1:6), labels=levels(as.factor(woco.unk.sf$KANTON))) +
+#   # scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
+#   # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
+#   # 
+#   ### add the bird icons
+#   annotation_custom(gunicon, xmin=5.2, xmax=5.8, ymin=0.88, ymax=0.96)+
+#   annotation_custom(wocoicon, xmin=5.5, xmax=6.9, ymin=0.85, ymax=1.02)+
+#   
+#   ## beautification of the axes
+#   theme(panel.background=element_rect(fill="white", colour="black"),
+#         panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+#         panel.grid.major.x = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         axis.text.y=element_text(size=14, color="black"),
+#         axis.text.x=element_text(size=14, color="black"),
+#         axis.title=element_text(size=16),
+#         legend.text=element_text(size=14, color="black"),
+#         legend.direction = "vertical",
+#         legend.box = "horizontal",
+#         legend.title=element_text(size=14, color="black"),
+#         legend.position="inside",
+#         legend.key = element_rect(fill = NA, color = NA),
+#         legend.background = element_rect(fill = NA, color = NA),
+#         legend.position.inside=c(0.75,0.15),
+#         strip.text=element_text(size=18, color="black"),
+#         strip.background=element_rect(fill="white", colour="black"))
+# FIGURE
+# 
+# ggsave(plot=FIGURE,
+#        filename="output/woco_iso_origin_probability_estimates.jpg", 
+#        device="jpg",width=11, height=8)
+# 
 
 
 # 4. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES -----------
