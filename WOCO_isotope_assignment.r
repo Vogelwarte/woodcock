@@ -531,7 +531,7 @@ woco.orig.model<-nimbleCode({
   for (i in 1:nind.unkn){
     
     # linear predictor of isotope non-local probability
-    p.nonlocal.iso[i] ~ dbeta(2,2)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
+    p.nonlocal.iso[i] ~ dunif(0,1)   ##  hist(rbeta(1000,2,2)) very low and very high probabilities are less likely a priori
     # logit.mean.p.nonlocal[a]<-log(mean.p.nonlocal.iso[a] / (1-mean.p.nonlocal.iso[a]))
     # 
     # logit.p.nonlocal.iso[i] <- logit.mean.p.nonlocal[age.unknown[i]+1] + cant.reff[canton[i]]  ##  combination of overall mean and random effect
