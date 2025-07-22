@@ -1,8 +1,6 @@
-### ISOTOPic ASSIGNMENT OF WOODCOCK FEATHERS ----
+### ISOTOPic AND SHOOTING TIME ASSIGNMENT OF WOODCOCK FEATHERS ----
 ## to properly analyse the origins of birds in Bohnenstengel et al. Report
 ## initiated by Steffen Oppel on 16 May 2025
-
-
 
 
 rm(list=ls())
@@ -10,10 +8,6 @@ library(data.table)
 library(dplyr)
 library(tidyverse)
 library(janitor)
-#library(readxl)
-library(assignR) ## https://cran.r-project.org/web/packages/assignR/vignettes/assignR.html
-# library(isocat) ## https://cran.r-project.org/web/packages/isocat/vignettes/isocat.html
-# library(isoAssign) ## https://rdrr.io/github/SMBC-NZP/MigConnectivity/man/isoAssign.html
 library(terra)
 library(raster)
 library(sf)
@@ -39,9 +33,10 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 # 1. READ IN PROCESSED ISOTOPE DATA ----------------
 load("data/woco.input.data.RData")
 
-# 2. COMBINED PROBABILITY MODEL TO ESTIMATE PROB OF LOCAL ORIGIN IN NIMBLE ----
 
-## 3.1. specify model in NIMBLE ----
+
+
+# 2. COMBINED PROBABILITY MODEL TO ESTIMATE PROB OF LOCAL ORIGIN IN NIMBLE ----
 
 woco.orig.model<-nimbleCode({
   
@@ -66,6 +61,7 @@ woco.orig.model<-nimbleCode({
   b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
   b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
   sigma.calib ~ dunif(0,20) # standard deviation
+  dispersion ~ dunif(1,50) # dispersion parameter to convert prior probability into beta distribution
 
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,9 +78,12 @@ woco.orig.model<-nimbleCode({
     # Potential local distribution based on timing used as prior
     logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
       b.mig.week*(unk.week[i])     ### week effect from migration model
-    p.nonlocal[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from departure model
-    
-    # Latent indicator for isotope distribution
+    p.nonlocal.prior[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from departure model
+    alpha[i] <- p.nonlocal.prior[i] * dispersion
+    beta[i] <- (1 - p.nonlocal.prior[i]) * dispersion
+
+    # Latent indicator for isotope distribution based on beta distribution of shooting time prior
+    p.nonlocal[i] ~ dbeta(alpha[i], beta[i])
     z[i] ~ dbern(p.nonlocal[i])  ## 
     
     # Potential local distribution based on isotope ratio
@@ -105,7 +104,7 @@ woco.orig.model<-nimbleCode({
 
 
 
-## 3.2. prepare the data needed for NIMBLE input ----
+# 3. prepare the data needed for NIMBLE input --------
 woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
@@ -118,7 +117,7 @@ woco.sf <- woco.sf %>%
 
 table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 
-#### DISTINGUISH CONSTANTS AND DATA----
+## 3.1. DISTINGUISH CONSTANTS AND DATA----
 # Constants are values that do not change, e.g. vectors of known index values or the indices used to define for loops
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
@@ -135,16 +134,15 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       )
 
 iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
-
                  d2H_feather.unknown = woco.unk.sf$dH)
 
 
 
 
-## 3.3. specify NIMBLE run settings ----
+## 3.2. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","p.nonlocal")
+parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal","p.nonlocal.prior")
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -153,6 +151,7 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
                   int.rain = rnorm(1,4.5, sd=5), # informative prior based on Powell
                   b.age = rnorm(1,-28.7, sd=5), # informative prior based on Powell
                   b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
+                  dispersion = runif(1,1,50), # dispersion parameter for beta distribution
                   sigma.calib = runif(1,0,20) # standard deviation
 
 )
@@ -166,11 +165,10 @@ n.chains <- 4
 
 
 
-## 3.4. run model in NIMBLE ------------------------------------------
-## this takes 5 min
-
+## 3.3. run model in NIMBLE ------------------------------------------
+### this takes 400 sec for 50000 iterations and converges in that time
 tic()
-### this takes 4000 sec (2 hrs) for 20000 iterations and converges in that time
+
 woco.iso <- nimbleMCMC(code = woco.orig.model,
                         constants=iso.constants,
                         data = iso.data,
@@ -193,9 +191,9 @@ saveRDS(woco.iso,"output/woco_iso_time_origin_model.rds")
 
 
 
-## 3.5. assess model and examine convergence ------------------------------------------
+# 4. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal","b.rain","b.age","int.rain","sigma.calib"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal","b.rain","b.age","int.rain","sigma.calib","dispersion"))) #"int.abd","b.countday","b2.countday","r.abd")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -209,11 +207,11 @@ fwrite(out,"output/woco_iso_time_origin_parm_estimates.csv")
 
 ## look at the chains and whether they mixed well
 chainsPlot(woco.iso$samples,
-           var=c("b.rain","b.age","int.rain","sigma.calib"))
+           var=c("b.rain","b.age","int.rain","sigma.calib","dispersion"))
 
 
 
-## 3.5.1 summarise probabilities across individuals ------------------------------------------
+## 4.1 summarise probabilities across individuals ------------------------------------------
 
 # compile all the samples
 samples <- rbind(woco.iso$samples$chain1,woco.iso$samples$chain2,woco.iso$samples$chain3,woco.iso$samples$chain4)
@@ -229,23 +227,8 @@ hist(mean.p.nonlocal$p.nonlocal)
 
 
 
-## 3.6. summarise output for manuscript text ------------------------------------------
-## changed after model includes mean and random effect
-# out %>%
-#   filter(!parameter %in% c("b.rain","b.age","int.rain","sigma.calib")) %>%
-#   mutate(Age=as.numeric(substr(parameter,nchar(parameter)-2,nchar(parameter)-1))) %>%
-#   mutate(Age=ifelse(Age==1,"Adult","Juvenile")) %>%
-#   group_by(Age) %>%
-#   summarise(m=mean(mean),l=min(lcl), u=max(ucl))
 
-agemeans<-out %>%
-  filter(parameter %in% c("mean.p.nonlocal[1]","mean.p.nonlocal[2]")) %>%
-  mutate(Age=as.numeric(substr(parameter,nchar(parameter)-1,nchar(parameter)-1))) %>%
-  mutate(Age=ifelse(Age==1,"Adult","Juvenile"))
-agemeans  
-
-
-## 3.7. summarise output in graphical form ------------------------------------------
+## 4.2. summarise output in graphical form ------------------------------------------
 
 # LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
 require(png)
@@ -310,7 +293,7 @@ ggsave(plot=FIGURE,
 
 
 
-# 4. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES -----------
+# 5. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES -----------
 plot_list <- list()
 for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 
@@ -355,278 +338,4 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 grid.arrange(grobs=plot_list,ncol=2)
 ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
        device="jpg",width=8, height=12)
-
-# # 5. Geographic assignment using assignR ----
-# 
-# ## 5.1. load shapefile of Switzerland and EUROPE ----
-# ### OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
-# 
-# SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
-#   st_transform(st_crs('EPSG:4326')) # Project to WGS84
-# plot(SUI)
-# 
-# bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
-# EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
-#   st_crop(bbox) %>%
-#   st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
-#   dplyr::select(admin,name,adm0_a3,geometry)
-# plot(EUR)
-# 
-# 
-# 
-# 
-# ## 5.2. plot the known origin points of WOCO that were sampled ----
-# 
-# woco.sf <- ORIG_WC %>%
-#   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-# 
-# 
-# ggplot(SUI) +
-#   geom_sf() +
-#   geom_sf(data=woco.sf,color="red")
-# 
-# 
-# 
-# 
-# 
-# ## 5.3. extract isoscape ----
-# 
-# ### this function throws a weird error - downloaded and ran function independently without problem
-# # isoscape <- getIsoscapes(isoType = "GlobalPrecipGS", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
-# #   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
-# ## go to "C:/STEFFEN/Vogelwarte/assignR" and open assignR.Rproj
-# ## then run the script "DOWNLOAD_ISOSCAPE.R"
-# 
-# isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
-#   crop(extent(SUI))
-# 
-# ## downloaded from Nelson et al 2021, but poor resolution
-# # isoscape <- raster("data/Piso.AI_v1.2020_0.5deg_1950-2020.nc") %>%
-# #   crop(extent(SUI))
-# 
-# plot(isoscape, xlab="Longitude", ylab="Latitude")
-# 
-# 
-# 
-# 
-# 
-# ## 5.4. get canned calibration data and calibrate rainwater against feather d2H  ----
-# 
-# # data("knownOrig")
-# # knownOrig$sources[1:2]
-# # knownOrig$samples %>% filter(Group=="Ground bird")
-# # 
-# # cal.grd.bird <- subOrigData(marker = 'd2H', dataset = c(5), ref_scale = NULL) # Extract data
-# # str(cal.grd.bird$data)
-# # 
-# # d2Hcalib <- calRaster(known = cal.grd.bird, isoscape = isoscape, interpMethod = 1, verboseLM = F, genplot = F) # Calibrate the mean and sd values from our isoscape
-# # summary(d2Hcalib$lm.model) # Extract model results
-# #  
-# # ggplot(data = d2Hcalib$lm.data, aes(y = tissue.iso, x = isoscape.iso)) + 
-# #   geom_point()  + 
-# #   stat_smooth(method = "lm", formula = 'y ~ x') + 
-# #   theme_classic()
-# 
-# ## manually rescale the isoscape with the Powell equation
-# 
-# isoscape.AD<- 4.50799 + 0.79760*isoscape
-# isoscape.JUV<- 4.50799 + 0.79760*isoscape - 28.73077
-# 
-# plot(isoscape.AD, xlab="Longitude", ylab="Latitude")
-# 
-# 
-# 
-# 
-# ## 5.4.1 building our own equation using the known origin feather samples ----
-# ## this looks weird like somebody had calculated the dH_reg
-# # summary(lm(dH~dH_reg+AGE, data=ORIG_WC))
-# 
-# ## 5.4.1.1. convert data to SpatVector ------
-# 
-# woco.vect<-terra::vect(woco.sf)
-# 
-# 
-# ## 5.4.1.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
-# 
-# woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
-# woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
-# 
-# 
-# ## 5.4.1.3. create equation to link rainwater to d2H of feather -------
-# ggplot(woco.sf, aes(x=d2h_GS,y=dH_reg, col=AGE, fill=AGE)) +
-#   geom_point() +
-#   geom_smooth(method="lm") +
-#   labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
-#   ## beautification of the axes
-#   theme(panel.background=element_rect(fill="white", colour="black"),
-#         panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
-#         panel.grid.minor = element_blank(),
-#         axis.text=element_text(size=16, color="black"), 
-#         axis.title=element_text(size=18),
-#         legend.position="inside",
-#         legend.position.inside=c(0.10,0.90),
-#         legend.box.background = element_blank(),
-#         legend.background = element_blank(),
-#         legend.title=element_text(size=18),
-#         legend.text=element_text(size=16, color="black"))
-# 
-# ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
-# 
-# ISO_CALIB<-lm(dH_reg~d2h_GS, data=woco.sf)
-# summary(ISO_CALIB)
-# 
-# 
-# 
-# 
-# ## 5.4.1.4. apply that equation to all other shot woodcocks -------
-# woco.unk.sf <- UNK_WC %>%
-#   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-# woco.unk.vect<-terra::vect(woco.unk.sf)
-# 
-# woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
-# woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
-# woco.unk.sf %>% filter(is.na(AGE))
-# 
-# d2H_pred<-predict(ISO_CALIB,newdata=woco.unk.sf,se.fit=TRUE,interval="prediction",level=0.95, type = "response")$fit
-# 
-# 
-# 
-# ## 5.4.1.5. test whether each shot feather came from within location-specific prediction interval -------
-# 
-# OUT_SUMMARY<-bind_cols(woco.unk.sf,d2H_pred) %>%
-#   filter(!is.na(dH_reg)) %>%
-#   st_drop_geometry() %>%
-#   mutate(LOCAL=ifelse(dH_reg>lwr & dH_reg<upr,1,0)) %>%
-#   group_by(AGE, KANTON) %>%
-#   summarise(prop.local=mean(LOCAL, na.rm=T)) %>%
-#   spread(key=AGE, value=prop.local)
-# 
-# fwrite(OUT_SUMMARY, "output/prop_local_WOCO_shot_isotopes.csv")
-# 
-# 
-# 
-# 
-# 
-# ## 5.5. PRIOR OF DISTRIBUTION  ----
-# min(values(isoscape)[,1],na.rm=T)
-# max(values(isoscape)[,1],na.rm=T)
-# distd2H_knownSUI<-hist(ORIG_WC$dH_correct, breaks=seq(-135,-5,5))
-# prior.probs<-tibble(d2H=distd2H_knownSUI$breaks[-1], prob=distd2H_knownSUI$density)
-# prior.probs$prob[findInterval(x=woco$dH_correct, vec=prior.probs$d2H)]
-# 
-# priorscape <- isoscape
-# length(values(isoscape)[,1])
-# length(values(priorscape)[,1])
-# length(findInterval(x=values(isoscape)[,1], vec=prior.probs$d2H))
-# values(priorscape)[,1]<-prior.probs$prob[findInterval(x=values(isoscape)[,1], vec=prior.probs$d2H)]
-# values(priorscape)[,2]<-2  ## arbitrary value for se of prior probability
-# 
-# 
-# 
-# 
-# ## 5.6. ASSIGNMENT TO ORIGIN  ----
-# ## this is computationally very intensive!!
-# ### because the isotope data are already converted into rainfall isotopes, we do not need the calibrated isoscape
-# origins <- pdRaster(isoscape,
-#                     unknown=UNK_WC[!(is.na(UNK_WC$dH_correct)),c(1,9)],
-#                     #prior=priorscape,
-#                     mask = as(EUR, 'Spatial'),
-#                     genplot = F)
-#                     #outDir="C:/Users/sop/OneDrive - Vogelwarte/Woodcock/output")
-# 
-# 
-# saveRDS(origins,"output/WOCO_origin_assignment.rds")
-# origins<-readRDS("output/WOCO_origin_assignment.rds")
-# 
-# ### check whether values sum to 1 - they do NOT sum to 1!!??
-# ALLout<-values(origins)
-# ALLprob<-apply(ALLout,2,sum,na.rm=T)
-# summary(ALLprob)
-# global(origins[[1]], 'sum', na.rm = TRUE)
-# 
-# ## 4.7. CROP ASSIGNMENT TO SWITZERLAND  ----
-# 
-# SUIorigins<-terra::crop(origins,SUI)
-# dim(SUIorigins)
-# out<-values(SUIorigins)
-# 
-# 
-# ## extract the cumulative probability of Switzerland for all of the birds shot in Switzerland
-# SUIprob<-apply(out,2,sum)
-# UNK_WC$Swissorigin_prob<-as.numeric(SUIprob)
-# any(names(SUIprob)!=UNK_WC$ID)
-# 
-# ## plot output against isotopes and date
-# ggplot(UNK_WC, aes(x=Swissorigin_prob, col=PROVENANCE_voigt, fill=PROVENANCE_voigt)) +
-#   geom_histogram(alpha=0.5,position = position_dodge(width=1))
-# 
-# 
-# ggplot(UNK_WC, aes(x=Swissorigin_prob,y=dH_correct, col=AGE)) +
-#   geom_point()
-# 
-
-
-############# TEMPLATE CODE PROVIDED BY COPILOT FOR COMBINING BOTH TIME AND d2H IN ASSIGNMENT PROBABILITY ##########
-
-library(nimble)
-
-# Define the model
-code <- nimbleCode({
-  # Prior for class membership
-  z ~ dcat(pi[1:2])  # z = 1 for A, z = 2 for B
-  
-  # Priors for class probabilities
-  pi[1] <- 0.5
-  pi[2] <- 0.5
-  
-  # Conditional distributions
-  d2H ~ dnorm(mu_d2H[z], sd = sigma_d2H[z])
-  time ~ dcustom(time_likelihood(time, z))
-})
-
-# Custom likelihood for time variable
-time_likelihood <- nimbleFunction(
-  run = function(x = double(0), z = integer(0)) {
-    returnType(double(0))
-    if (z == 1) {
-      # Logistic distribution for Population A
-      mu <- 0
-      s <- 1
-      loglik <- -x + 2 * log(1 / (1 + exp(-x)))
-    } else {
-      # Inverse distribution for Population B (e.g., 1/x)
-      if (x <= 0) return(-1e6)  # Penalize invalid values
-      loglik <- -log(x^2)
-    }
-    return(loglik)
-  }
-)
-
-# Constants and data
-constants <- list(
-  mu_d2H = c(-50, -100),
-  sigma_d2H = c(10, 15)
-)
-
-# Example data point
-data <- list(
-  d2H = -60,
-  time = 2
-)
-
-# Initial values
-inits <- list(z = 1)
-
-# Build and compile the model
-model <- nimbleModel(code, constants = constants, data = data, inits = inits)
-cmodel <- compileNimble(model)
-
-# Configure and run MCMC
-conf <- configureMCMC(model, monitors = "z")
-mcmc <- buildMCMC(conf)
-cmcmc <- compileNimble(mcmc, project = model)
-samples <- runMCMC(cmcmc, niter = 1000)
-
-# Posterior probability of class membership
-table(samples) / length(samples)
 
