@@ -1,18 +1,11 @@
-### ISOTOPic AND SHOOTING TIME ASSIGNMENT OF WOODCOCK FEATHERS ----
-## to properly analyse the origins of birds in Bohnenstengel et al. Report
-## initiated by Steffen Oppel on 16 May 2025
+### PHENOLOGY OF WOODCOCK IN SWITZERLAND ----
+## testing abundance in separate model
 
 
 rm(list=ls())
 library(data.table)
 library(dplyr)
 library(tidyverse)
-library(janitor)
-library(terra)
-library(raster)
-library(sf)
-library(rnaturalearth)
-library(rnaturalearthdata)
 library(coda)
 library(MCMCvis)
 library(nimble)
@@ -20,8 +13,6 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 filter<-dplyr::filter
 select<-dplyr::select
-library(gridExtra)
-library(tidyterra)
 
 
 ## set root folder for project
@@ -32,75 +23,45 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 # 1. READ IN PROCESSED ISOTOPE DATA ----------------
 load("data/woco.input.data.RData")
-
+FIG_s3
 
 
 
 # 2. COMBINED PROBABILITY MODEL TO ESTIMATE PROB OF LOCAL ORIGIN IN NIMBLE ----
 
-woco.orig.model<-nimbleCode({
+woco.phenology.model<-nimbleCode({
   
-  # Parameters:
-  # p.nonlocal: probability of local origin (that shot woodcock was a local bird) - varies by age and canton
-  
-  # b.age: regression parameter for age that translates rainfall d2H to feather d2H 
-  # b.rain: regression parameter for rainfall d2H that translates rainfall d2H to feather d2H
-  # int.rain: regression intercept that translates rainfall d2H to feather d2H 
-  
+
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  # CALIBRATION REGRESSION FOR KNOWN ORIGIN BIRDS 
+  # TIME DISTRIBUTION FOR OVERALL ABUNDANCE
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  # Likelihood:  
-  for (i in 1:nind.known){
-        d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib)
-        mu.known[i] <- int.rain + b.age*age.known[i] + b.rain*d2H_rain.known[i]
-      }
-    
-  # Priors informed by known origin woodcock feathers in UK (Powell thesis 2012)
-  int.rain ~ dnorm(4.5, sd=5) # informative prior based on Powell
-  b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
-  b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
-  sigma.calib ~ dunif(0,20) # standard deviation
-  dispersion ~ dunif(1,50) # dispersion parameter to convert prior probability into beta distribution
+  # negative binomial distribution:
+  for (i in 1:n.count.weeks){
+    abund.known[i] ~ dnegbin(mu.abd.known[i], r.abd)
+    mu.abd.known[i] <- int.abd + b.countday*count.day[i] + b2.countday*count.day.sq[i]
+  }
+
+  # Priors not informed by anything
+  int.abd ~ dnorm(0.2, sd=5) # uninformative prior
+  b.countday ~ dnorm(1, sd=5) # uninformative prior
+  b2.countday ~ dnorm(1, sd=5) # uninformative prior for quadratic effect
+  r.abd ~ dgamma(0.01,0.01) # dispersion parameter for neg bin distribution
 
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
-  
-  # Likelihood 
-  sd.unknown[2]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
-  sd.unknown[1]<-sigma.calib
-  
   for (i in 1:nind.unkn){
     
-    # Potential local distribution based on timing used as prior
-    logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
-      b.mig.week*(unk.week[i])     ### week effect from migration model
-    p.nonlocal.prior[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from departure model
-    alpha[i] <- p.nonlocal.prior[i] * dispersion
-    beta[i] <- (1 - p.nonlocal.prior[i]) * dispersion
-
-    # Latent indicator for isotope distribution based on beta distribution of shooting time prior
-    p.nonlocal[i] ~ dbeta(alpha[i], beta[i])
-    z[i] ~ dbern(p.nonlocal[i])  ## 
-    
-    # Potential local distribution based on isotope ratio
-    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
-    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]  ### local expected feather isotope distribution
-
-    # evaluate origin feather isotope value from plausible target distributions
-    d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
-    
+    # Potential local distribution based on timing
+    abd.unknown[i] <- int.abd + b.countday*unk.day[i] + b2.countday*unk.day.sq[i]    ### overall abundance distribution from abundance data
+    p.nonlocal[i] <-ilogit(abd.unknown[i])   ### predicted probability from abundance time model
     
   } #i
   
 
 }) ## end of nimble code chunk
-
-
-
 
 
 
@@ -121,20 +82,14 @@ table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 # Constants are values that do not change, e.g. vectors of known index values or the indices used to define for loops
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
-                      nind.known = dim(woco.sf)[1],
-                      mean.rain.d2H = mean.rain.d2H,
-                      sd.rain.d2H = sd.rain.d2H,
-                      d2H_rain.known=woco.sf$d2h_GS,
-                      d2H_rain.unknown=woco.unk.sf$d2h_GS,
-                      age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
-                      age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
-                      lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
-                      b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
-                      unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
+                      unk.day=yday(UNK_WC$DATE),
+                      unk.day.sq=(yday(UNK_WC$DATE))^2,
+                      count.day=yday(woco_abundance$Date),
+                      count.day.sq=yday(woco_abundance$Date)^2,
+                      n.count.weeks=length(woco_abundance$SOPM)
                       )
 
-iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
-                 d2H_feather.unknown = woco.unk.sf$dH)
+iso.data <- list(abund.known=woco_abundance$abund)
 
 
 
@@ -142,17 +97,17 @@ iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
 ## 3.2. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal","p.nonlocal.prior")
+parameters.iso <- c("int.abd","b.countday","b2.countday","p.nonlocal","abd.unknown")
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
 
-iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifelse(woco.unk.sf$AGE=="Adulte",0,1),0,1),
-                  int.rain = rnorm(1,4.5, sd=5), # informative prior based on Powell
-                  b.age = rnorm(1,-28.7, sd=5), # informative prior based on Powell
-                  b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
-                  dispersion = runif(1,1,50), # dispersion parameter for beta distribution
-                  sigma.calib = runif(1,0,20) # standard deviation
+iso.inits <- list(
+                  ## INITS FOR ABUNDANCE REGRESSION
+                  int.abd = rnorm(1,0.2, sd=5), # uninformative prior
+                  b.countday = rnorm(1,1, sd=5), # uninformative prior
+                  b2.countday = rnorm(1,1, sd=5), # uninformative prior for quadratic effect
+                  r.abd  = rgamma(1,0.01,0.01) # standard deviation
 
 )
 
@@ -165,11 +120,28 @@ n.chains <- 4
 
 
 
+# PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
+test <- nimbleModel(code = woco.phenology.model,
+                    constants=iso.constants,
+                    data = iso.data,
+                    inits = iso.inits,
+                    calculate=TRUE)
+
+### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
+test$initializeInfo()
+#help(modelInitialization)
+
+### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
+
+
+
 ## 3.3. run model in NIMBLE ------------------------------------------
 ### this takes 400 sec for 50000 iterations and converges in that time
 tic()
 
-woco.iso <- nimbleMCMC(code = woco.orig.model,
+woco.iso <- nimbleMCMC(code = woco.phenology.model,
                         constants=iso.constants,
                         data = iso.data,
                         inits = iso.inits,,
@@ -184,22 +156,13 @@ toc()
 
 
 
-saveRDS(woco.iso,"output/woco_iso_time_origin_model.rds")
-#woco_surv<-readRDS("output/woco_iso_origin_model.rds")
-
-
-
-
-
 # 4. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("b.rain","b.age","int.rain","sigma.calib","dispersion"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("int.abd","b.countday","b2.countday")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
-#out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_iso_time_origin_parm_estimates.csv")
-#out<-fread("output/woco_iso_origin_parm_estimates.csv")
+
 
 
 #MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))

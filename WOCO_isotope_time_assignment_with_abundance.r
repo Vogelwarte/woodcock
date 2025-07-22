@@ -61,7 +61,23 @@ woco.orig.model<-nimbleCode({
   b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
   b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
   sigma.calib ~ dunif(0,20) # standard deviation
-  dispersion ~ dunif(1,50) # dispersion parameter to convert prior probability into beta distribution
+  dispersion ~ dnorm(15,tau=100) # dispersion parameter to convert prior probability into beta distribution - almost fixed quantity
+  
+  
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # TIME DISTRIBUTION FOR OVERALL ABUNDANCE
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # negative binomial distribution:
+  for (i in 1:n.count.weeks){
+    abund.known[i] ~ dnegbin(mu.abd.known[i], r.abd)
+    mu.abd.known[i] <- int.abd + b.countday*count.day[i] + b2.countday*count.day.sq[i]
+  }
+
+  # Priors not informed by anything
+  int.abd ~ dnorm(0.2, sd=5) # uninformative prior
+  b.countday ~ dnorm(1, sd=5) # uninformative prior
+  b2.countday ~ dnorm(1, sd=5) # uninformative prior for quadratic effect
+  r.abd ~ dgamma(0.01,0.01) # dispersion parameter for neg bin distribution
 
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,11 +94,29 @@ woco.orig.model<-nimbleCode({
     # Potential local distribution based on timing used as prior
     logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
       b.mig.week*(unk.week[i])     ### week effect from migration model
-    p.nonlocal.prior[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from departure model
-    alpha[i] <- p.nonlocal.prior[i] * dispersion
-    beta[i] <- (1 - p.nonlocal.prior[i]) * dispersion
+    p.nonlocal.prior1[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from departure model
+    
+    
+    # Potential local distribution based on timing
+    abd.unknown[i] <- int.abd + b.countday*unk.day[i] + b2.countday*unk.day.sq[i]    ### overall abundance distribution from abundance data
+    p.nonlocal.prior2[i] <-ilogit(abd.unknown[i])   ### predicted probability from abundance time model
+    
+    
+    # combine the probabilities of migration and abundance into a single probability using log odds
+    # Convert each probability to odds:
+    odds_mig[i] <- p.nonlocal.prior1[i] / (1 - p.nonlocal.prior1[i])
+    odds_abd[i] <- p.nonlocal.prior2[i]  / (1 - p.nonlocal.prior2[i])
+    
+    # Combine odds
+    combined_odds[i] <- odds_mig[i] * odds_abd[i]
+    
+    # Convert back to probability
+    p.nonlocal.prior[i] <- combined_odds[i] / (1 + combined_odds[i])
+
 
     # Latent indicator for isotope distribution based on beta distribution of shooting time prior
+    alpha[i] <- p.nonlocal.prior[i] * dispersion
+    beta[i] <- (1 - p.nonlocal.prior[i]) * dispersion
     p.nonlocal[i] ~ dbeta(alpha[i], beta[i])
     z[i] ~ dbern(p.nonlocal[i])  ## 
     
@@ -130,10 +164,16 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
                       lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
                       b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
-                      unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
+                      unk.day=yday(UNK_WC$DATE),
+                      unk.day.sq=(yday(UNK_WC$DATE))^2,
+                      unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26")),   ## migration weeks start only in August
+                      count.day=yday(woco_abundance$Date),
+                      count.day.sq=yday(woco_abundance$Date)^2,
+                      n.count.weeks=length(woco_abundance$SOPM)
                       )
 
 iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
+                 abund.known=woco_abundance$SOPM,
                  d2H_feather.unknown = woco.unk.sf$dH)
 
 
@@ -142,7 +182,7 @@ iso.data <- list(d2H_feather.known = woco.unk.sf$dH,
 ## 3.2. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal","p.nonlocal.prior")
+parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal","p.nonlocal.prior","p.nonlocal.prior1","p.nonlocal.prior2")
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -151,7 +191,14 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
                   int.rain = rnorm(1,4.5, sd=5), # informative prior based on Powell
                   b.age = rnorm(1,-28.7, sd=5), # informative prior based on Powell
                   b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
-                  dispersion = runif(1,1,50), # dispersion parameter for beta distribution
+                  dispersion = 15, # dispersion parameter for beta distribution set to sensible value
+                  
+                  ## INITS FOR ABUNDANCE REGRESSION
+                  int.abd = rnorm(1,0.2, sd=5), # uninformative prior
+                  b.countday = rnorm(1,1, sd=5), # uninformative prior
+                  b2.countday = rnorm(1,1, sd=5), # uninformative prior for quadratic effect
+                  r.abd  = rgamma(1,0.01,0.01), # dispersion parameter for neg bin distribution
+                  
                   sigma.calib = runif(1,0,20) # standard deviation
 
 )
@@ -162,6 +209,23 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
 n.iter <- 50000
 n.burnin <- 25000
 n.chains <- 4
+
+
+
+# PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
+test <- nimbleModel(code = woco.orig.model,
+                    constants=iso.constants,
+                    data = iso.data,
+                    inits = iso.inits,
+                    calculate=TRUE)
+
+### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
+test$initializeInfo()
+#help(modelInitialization)
+
+### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
 
 
 
