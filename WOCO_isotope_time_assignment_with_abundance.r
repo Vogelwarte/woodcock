@@ -172,7 +172,7 @@ iso.data <- list(d2H_feather.known = woco.sf$dH,
 ## 3.2. specify NIMBLE run settings --------------------
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal","p.nonlocal.prior","p.nonlocal.prior1")
+parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
