@@ -1,6 +1,8 @@
 ### PHENOLOGY OF WOODCOCK IN SWITZERLAND ----
 ## testing abundance in separate model
 
+### abandoned because Poisson model did not work
+
 
 rm(list=ls())
 library(data.table)
@@ -25,6 +27,20 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 load("data/woco.input.data.RData")
 FIG_s3
 
+woco_abundance <- woco_abundance %>%
+  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2))
+
+UNK_WC <- UNK_WC %>%
+  mutate(DAY=yday(DATE), DAY_2=(yday(DATE)^2))
+
+
+library(MASS)
+summary(m1<-glm.nb(SOPM ~ DAY + DAY_2, data = woco_abundance))
+summary(m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson"))
+hist((predict(m1, newdat=UNK_WC)/max(woco_abundance$SOPM)))
+hist(1-(predict(m2, newdat=UNK_WC)/max(woco_abundance$SOPM)))
+
+
 
 
 # 2. COMBINED PROBABILITY MODEL TO ESTIMATE PROB OF LOCAL ORIGIN IN NIMBLE ----
@@ -35,17 +51,23 @@ woco.phenology.model<-nimbleCode({
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # TIME DISTRIBUTION FOR OVERALL ABUNDANCE
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  # negative binomial distribution:
+
   for (i in 1:n.count.weeks){
-    abund.known[i] ~ dnegbin(mu.abd.known[i], r.abd)
-    mu.abd.known[i] <- int.abd + b.countday*count.day[i] + b2.countday*count.day.sq[i]
+    # negative binomial distribution:
+    # abund.known[i] ~ dnegbin(mu.abd.known[i], r.abd)
+    # mu.abd.known[i] <- int.abd + b.countday*count.day[i] + b2.countday*count.day.sq[i]
+    
+    # Poisson distribution:
+    abund.known[i] ~ dpois(mu.abd.known[i])
+    log(mu.abd.known[i]) <- int.abd + b.countday*count.day[i] + b2.countday*count.day.sq[i]
+    
   }
 
-  # Priors not informed by anything
-  int.abd ~ dnorm(0.2, sd=5) # uninformative prior
-  b.countday ~ dnorm(1, sd=5) # uninformative prior
-  b2.countday ~ dnorm(1, sd=5) # uninformative prior for quadratic effect
-  r.abd ~ dgamma(0.01,0.01) # dispersion parameter for neg bin distribution
+  # Priors informed by simple glm above
+  int.abd ~ dnorm(-0.48, sd=0.5) # uninformative prior
+  b.countday ~ dnorm(0.33, sd=0.5) # uninformative prior
+  b2.countday ~ dnorm(-0.005, sd=0.5) # uninformative prior for quadratic effect
+  # r.abd ~ dgamma(0.01,0.01) # dispersion parameter for neg bin distribution
 
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -55,8 +77,8 @@ woco.phenology.model<-nimbleCode({
   for (i in 1:nind.unkn){
     
     # Potential local distribution based on timing
-    abd.unknown[i] <- int.abd + b.countday*unk.day[i] + b2.countday*unk.day.sq[i]    ### overall abundance distribution from abundance data
-    p.nonlocal[i] <-ilogit(abd.unknown[i])   ### predicted probability from abundance time model
+    log(abd.unknown[i]) <- int.abd + b.countday*unk.day[i] + b2.countday*unk.day.sq[i]    ### overall abundance distribution from abundance data
+    p.nonlocal[i] <-1-(abd.unknown[i]/max.count)   ### predicted probability of NON-LOCAL origin from abundance time model scaled to maximum count
     
   } #i
   
@@ -82,6 +104,7 @@ table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 # Constants are values that do not change, e.g. vectors of known index values or the indices used to define for loops
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
+                      max.count=max(woco_abundance$SOPM),
                       unk.day=yday(UNK_WC$DATE),
                       unk.day.sq=(yday(UNK_WC$DATE))^2,
                       count.day=yday(woco_abundance$Date),
@@ -89,7 +112,7 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       n.count.weeks=length(woco_abundance$SOPM)
                       )
 
-iso.data <- list(abund.known=woco_abundance$abund)
+iso.data <- list(abund.known=woco_abundance$SOPM)
 
 
 
@@ -97,25 +120,25 @@ iso.data <- list(abund.known=woco_abundance$abund)
 ## 3.2. specify NIMBLE run settings ----
 
 # Parameters monitored
-parameters.iso <- c("int.abd","b.countday","b2.countday","p.nonlocal","abd.unknown")
+parameters.iso <- c("int.abd","b.countday","b2.countday","p.nonlocal")
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
 
 iso.inits <- list(
                   ## INITS FOR ABUNDANCE REGRESSION
-                  int.abd = rnorm(1,0.2, sd=5), # uninformative prior
-                  b.countday = rnorm(1,1, sd=5), # uninformative prior
-                  b2.countday = rnorm(1,1, sd=5), # uninformative prior for quadratic effect
-                  r.abd  = rgamma(1,0.01,0.01) # standard deviation
+                  int.abd = -0.48, # uninformative prior
+                  b.countday = 0.33, # uninformative prior
+                  b2.countday = -0.0005 # uninformative prior for quadratic effect
+                  #r.abd  = rgamma(1,0.01,0.01) # standard deviation
 
 )
 
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 50000
-n.burnin <- 25000
+n.iter <- 5000
+n.burnin <- 2500
 n.chains <- 4
 
 
@@ -130,7 +153,13 @@ test <- nimbleModel(code = woco.phenology.model,
 ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
 test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
 test$initializeInfo()
-#help(modelInitialization)
+help(modelInitialization)
+test$mu.abd.known
+test$abund.known
+test$logProb_abund.known
+test$logProb_b.countday
+test$abd.unknown
+test$p.nonlocal
 
 ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
 # configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
