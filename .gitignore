@@ -56,3 +56,7 @@ literature/
 .doc
 .docx
 .pptx
+
+## files that are too large
+output/woco_iso_time_origin_model.rds
+data/GLOBCOVER_L4_200901_200912_V2.3.tif
