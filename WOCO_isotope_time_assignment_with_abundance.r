@@ -6,6 +6,8 @@
 ## completed on 24 July 2025
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~###
 
+## minor adjustments based on Pius Korner's suggestions from 25 July 2025
+
 
 rm(list=ls())
 library(data.table)
@@ -37,22 +39,30 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 # 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
 # prepared in WOCO_isotope_assignment.r
 load("data/woco.input.data.RData")
-
+try(rm(isoscape, globcover), silent=T)
+# ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
 ## 1.1. modify data to include abundance predictions from Ornitho.ch records ----------
 ## this approach is intended to address the dilution effect (when local birds are outnumbered by migrants)
-woco_abundance <- woco_abundance %>%
-  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2))
 
 woco.unk.abd.prior <- woco.unk.sf %>%
   st_drop_geometry() %>%
   mutate(DAY=yday(DATE), DAY_2=(yday(DATE)^2))
 
+woco_abundance <- woco_abundance %>%
+  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2)) %>%
+  dplyr::filter(DAY >= min(woco.unk.abd.prior$DAY)) %>%
+  dplyr::filter(DAY <= max(woco.unk.abd.prior$DAY))
+
+
 m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson")
-woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior)/max(woco_abundance$SOPM) ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
-# ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
+woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")/max(woco_abundance$SOPM) ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
+summary(predict(m2, newdat=woco.unk.abd.prior, type="response")/max(woco_abundance$SOPM))
 
-
+ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
+  geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
+  geom_smooth(method=loess, se=T) +
+  geom_line(data=woco.unk.sf, aes(x=yday(DATE),y=abd_prior), col="firebrick")
 
 
 # 2. SPECIFY COMBINED PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
@@ -98,17 +108,20 @@ woco.orig.model<-nimbleCode({
       b.mig.week*(unk.week[i])     ### week effect from migration model
     p.nonlocal.prior1[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from migration model
     
-    # combine the probabilities of migration and abundance into a single probability using log odds
-    # Convert each probability to odds:
-    odds_mig[i] <- p.nonlocal.prior1[i] / (1 - p.nonlocal.prior1[i])
-    odds_abd[i] <- p.nonlocal.prior2[i]  / (1 - p.nonlocal.prior2[i])  ## this prior is specified in the data based on count data series
+    # # combine the probabilities of migration and abundance into a single probability using log odds
+    # # Convert each probability to odds:
+    # odds_mig[i] <- p.nonlocal.prior1[i] / (1 - p.nonlocal.prior1[i])
+    # odds_abd[i] <- p.nonlocal.prior2[i]  / (1 - p.nonlocal.prior2[i])  ## this prior is specified in the data based on count data series
+    # 
+    # # combine odds
+    # combined_odds[i] <- max(1e-6, min(1e6, odds_mig[i] * odds_abd[i]))  ## with safeguard to avoid values <0
+    # 
+    # # convert odds ratio back to probability
+    # p.nonlocal.prior[i] <- combined_odds[i] / (1 + combined_odds[i])  ## Option 1: combining priors with odds-ratios
+    # p.nonlocal.prior[i] <- (p.nonlocal.prior1[i] + p.nonlocal.prior2[i])/2  ## Option 2: combining priors by taking the mean
+    p.nonlocal.prior[i] <- max(p.nonlocal.prior1[i],p.nonlocal.prior2[i])  ## Option 3: combining priors by taking the minimum (once birds have migrated the lowest prob will do)
+    # p.nonlocal.prior[i] <- p.nonlocal.prior1[i]  ## Option 4: ignore abundance prior
     
-    # combine odds
-    combined_odds[i] <- max(1e-6, min(1e6, odds_mig[i] * odds_abd[i]))  ## with safeguard to avoid values <0
-    
-    # convert odds ratio back to probability
-    p.nonlocal.prior[i] <- combined_odds[i] / (1 + combined_odds[i])
-
     # Latent indicator for isotope distribution based on beta distribution of shooting time prior
     alpha[i] <- max(1e-3, p.nonlocal.prior[i] * dispersion)   ## with safeguard to avoid values <0
     beta[i]  <- max(1e-3, (1 - p.nonlocal.prior[i]) * dispersion)   ## with safeguard to avoid values <0
@@ -157,7 +170,7 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       d2H_rain.unknown=woco.unk.sf$d2h_GS,
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
-                      p.nonlocal.prior2 = 1-woco.unk.sf$abd_prior,
+                      p.nonlocal.prior2 = woco.unk.sf$abd_prior,
                       lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
                       b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
                       unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
@@ -189,8 +202,8 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 100000
-n.burnin <- 50000
+n.iter <- 10000
+n.burnin <- 5000
 n.chains <- 4
 
 
@@ -284,10 +297,10 @@ out.sui<- mean.p.nonlocal %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
   group_by(age) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.ucl=quantile(p.nonlocal.mean,0.025), foreign.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   select(-age)
-  
+out.sui  
 fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
 
 
@@ -298,11 +311,11 @@ out.ctn<- mean.p.nonlocal %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
   group_by(age,ctn) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.ucl=quantile(p.nonlocal.mean,0.025), foreign.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   ungroup() %>%
   select(-age)
-
+out.ctn
 fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
 
 
