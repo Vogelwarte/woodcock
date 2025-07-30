@@ -8,12 +8,9 @@
 
 ## minor adjustments based on Pius Korner's suggestions from 25 July 2025
 
-<<<<<<< HEAD
 ## BASE MANUSCRIPT ON PRIOR OPTIONS 3 and 4 - with and without abundance information
 ## this leads to vastly different estimates, and it will be necessary to report that difference
 
-=======
->>>>>>> 63def49ba4c78ed76f55b9eb6d9671888cf6e81b
 
 rm(list=ls())
 library(data.table)
@@ -62,7 +59,6 @@ woco_abundance <- woco_abundance %>%
 
 
 m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson")
-<<<<<<< HEAD
 #m2<-loess(SOPM ~ DAY, data = woco_abundance, family = "poisson")
 woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")  ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
 woco.unk.sf$abd_prior <- woco.unk.sf$abd_prior/ceiling(max(woco.unk.sf$abd_prior)) ## scale to a proportion, but round up maximum because beta prior cannot take values of 1
@@ -76,15 +72,7 @@ ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
 
 
 
-=======
-woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")/max(woco_abundance$SOPM) ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
-summary(predict(m2, newdat=woco.unk.abd.prior, type="response")/max(woco_abundance$SOPM))
->>>>>>> 63def49ba4c78ed76f55b9eb6d9671888cf6e81b
 
-ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
-  geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
-  geom_smooth(method=loess, se=T) +
-  geom_line(data=woco.unk.sf, aes(x=yday(DATE),y=abd_prior), col="firebrick")
 
 
 # 2. SPECIFY COMBINED PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
@@ -225,8 +213,8 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifel
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 10000
-n.burnin <- 5000
+n.iter <- 100000
+n.burnin <- 50000
 n.chains <- 4
 
 
@@ -323,16 +311,10 @@ out.sui<- mean.p.nonlocal %>%
   group_by(age) %>%
   summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-<<<<<<< HEAD
   select(-age) %>%
   mutate(prior="combined abundance and migration")
 out.sui  
 #fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI_comb_prior.csv")
-=======
-  select(-age)
-out.sui  
-fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
->>>>>>> 63def49ba4c78ed76f55b9eb6d9671888cf6e81b
 
 
 # summarise by Canton
@@ -345,7 +327,6 @@ out.ctn<- mean.p.nonlocal %>%
   summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   ungroup() %>%
-<<<<<<< HEAD
   select(-age) %>%
   mutate(prior="combined abundance and migration")
 out.ctn
@@ -486,9 +467,6 @@ out.ctn<- mean.p.nonlocal.migprior %>%
   select(-age)  %>%
   mutate(prior="only migration") %>%
   bind_rows(out.ctn)
-=======
-  select(-age)
->>>>>>> 63def49ba4c78ed76f55b9eb6d9671888cf6e81b
 out.ctn
 fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
 
