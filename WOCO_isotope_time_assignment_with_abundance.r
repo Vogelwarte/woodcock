@@ -6,6 +6,11 @@
 ## completed on 24 July 2025
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~###
 
+## minor adjustments based on Pius Korner's suggestions from 25 July 2025
+
+## BASE MANUSCRIPT ON PRIOR OPTIONS 3 and 4 - with and without abundance information
+## this leads to vastly different estimates, and it will be necessary to report that difference
+
 
 rm(list=ls())
 library(data.table)
@@ -37,25 +42,41 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 # 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
 # prepared in WOCO_isotope_assignment.r
 load("data/woco.input.data.RData")
-
+try(rm(isoscape, globcover), silent=T)
+# ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
 ## 1.1. modify data to include abundance predictions from Ornitho.ch records ----------
 ## this approach is intended to address the dilution effect (when local birds are outnumbered by migrants)
-woco_abundance <- woco_abundance %>%
-  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2))
 
 woco.unk.abd.prior <- woco.unk.sf %>%
   st_drop_geometry() %>%
   mutate(DAY=yday(DATE), DAY_2=(yday(DATE)^2))
 
+woco_abundance <- woco_abundance %>%
+  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2)) %>%
+  dplyr::filter(DAY >= min(woco.unk.abd.prior$DAY)) %>%
+  dplyr::filter(DAY <= max(woco.unk.abd.prior$DAY))
+
+
 m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson")
-woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior)/max(woco_abundance$SOPM) ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
-# ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
+#m2<-loess(SOPM ~ DAY, data = woco_abundance, family = "poisson")
+woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")  ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
+woco.unk.sf$abd_prior <- woco.unk.sf$abd_prior/ceiling(max(woco.unk.sf$abd_prior)) ## scale to a proportion, but round up maximum because beta prior cannot take values of 1
+summary(woco.unk.sf$abd_prior)
+hist(woco.unk.sf$abd_prior)
+
+ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
+  geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
+  geom_smooth(method=loess, se=T) +
+  geom_line(data=woco.unk.sf, aes(x=yday(DATE),y=abd_prior), col="firebrick")
+
+
 
 
 
 
 # 2. SPECIFY COMBINED PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
+## NOTE: ensure you uncheck the desired prior option
 
 woco.orig.model<-nimbleCode({
   
@@ -98,17 +119,20 @@ woco.orig.model<-nimbleCode({
       b.mig.week*(unk.week[i])     ### week effect from migration model
     p.nonlocal.prior1[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from migration model
     
-    # combine the probabilities of migration and abundance into a single probability using log odds
-    # Convert each probability to odds:
-    odds_mig[i] <- p.nonlocal.prior1[i] / (1 - p.nonlocal.prior1[i])
-    odds_abd[i] <- p.nonlocal.prior2[i]  / (1 - p.nonlocal.prior2[i])  ## this prior is specified in the data based on count data series
+    # # combine the probabilities of migration and abundance into a single probability using log odds
+    # # Convert each probability to odds:
+    # odds_mig[i] <- p.nonlocal.prior1[i] / (1 - p.nonlocal.prior1[i])
+    # odds_abd[i] <- p.nonlocal.prior2[i]  / (1 - p.nonlocal.prior2[i])  ## this prior is specified in the data based on count data series
+    # 
+    # # combine odds
+    # combined_odds[i] <- max(1e-6, min(1e6, odds_mig[i] * odds_abd[i]))  ## with safeguard to avoid values <0
+    # 
+    # # convert odds ratio back to probability
+    # p.nonlocal.prior[i] <- combined_odds[i] / (1 + combined_odds[i])  ## Option 1: combining priors with odds-ratios
+    # p.nonlocal.prior[i] <- (p.nonlocal.prior1[i] + p.nonlocal.prior2[i])/2  ## Option 2: combining priors by taking the mean
+    p.nonlocal.prior[i] <- max(p.nonlocal.prior1[i],p.nonlocal.prior2[i])  ## Option 3: combining priors by taking the minimum (once birds have migrated the lowest prob will do)
+    # p.nonlocal.prior[i] <- p.nonlocal.prior1[i]  ## Option 4: ignore abundance prior
     
-    # combine odds
-    combined_odds[i] <- max(1e-6, min(1e6, odds_mig[i] * odds_abd[i]))  ## with safeguard to avoid values <0
-    
-    # convert odds ratio back to probability
-    p.nonlocal.prior[i] <- combined_odds[i] / (1 + combined_odds[i])
-
     # Latent indicator for isotope distribution based on beta distribution of shooting time prior
     alpha[i] <- max(1e-3, p.nonlocal.prior[i] * dispersion)   ## with safeguard to avoid values <0
     beta[i]  <- max(1e-3, (1 - p.nonlocal.prior[i]) * dispersion)   ## with safeguard to avoid values <0
@@ -157,7 +181,7 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       d2H_rain.unknown=woco.unk.sf$d2h_GS,
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
-                      p.nonlocal.prior2 = 1-woco.unk.sf$abd_prior,
+                      p.nonlocal.prior2 = woco.unk.sf$abd_prior,
                       lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
                       b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
                       unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
@@ -237,7 +261,7 @@ toc()
 
 
 
-saveRDS(woco.iso,"output/woco_iso_time_origin_model.rds")
+# saveRDS(woco.iso,"output/woco_iso_time_origin_model_comb_prior.rds") # no point saving - it only runs 10 min and the file is too large for GitHub
 #woco_surv<-readRDS("output/woco_iso_origin_model.rds")
 
 
@@ -251,7 +275,7 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_iso_time_origin_parm_estimates.csv")
+fwrite(out,"output/woco_iso_time_origin_parm_estimates_comb_prior.csv")
 #out<-fread("output/woco_iso_origin_parm_estimates.csv")
 
 
@@ -272,7 +296,8 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal\\[", colnames(samples))])
   gather(key="parameter",value="p.nonlocal") %>%
   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
   mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=woco.unk.sf$KANTON[ind])
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+  mutate(prior="combined abundance and migration")
 
 
 mean.p.nonlocal %>% filter(is.na(age))
@@ -284,11 +309,12 @@ out.sui<- mean.p.nonlocal %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
   group_by(age) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.ucl=quantile(p.nonlocal.mean,0.025), foreign.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  select(-age)
-  
-fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
+  select(-age) %>%
+  mutate(prior="combined abundance and migration")
+out.sui  
+#fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI_comb_prior.csv")
 
 
 # summarise by Canton
@@ -298,17 +324,157 @@ out.ctn<- mean.p.nonlocal %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
   group_by(age,ctn) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.ucl=quantile(p.nonlocal.mean,0.025), foreign.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   ungroup() %>%
-  select(-age)
+  select(-age) %>%
+  mutate(prior="combined abundance and migration")
+out.ctn
+#fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_comb_prior.csv")
 
+
+
+
+
+# 5. RUN MIGRATION ONLY PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
+
+woco.orig.model.migprior<-nimbleCode({
+  
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # CALIBRATION REGRESSION FOR KNOWN ORIGIN BIRDS 
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Likelihood:  
+  for (i in 1:nind.known){
+    d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib)
+    mu.known[i] <- int.rain + b.age*age.known[i] + b.rain*d2H_rain.known[i]
+  }
+  
+  # Priors informed by known origin woodcock feathers in UK (Powell thesis 2012)
+  int.rain ~ dnorm(4.5, sd=5) # informative prior based on Powell
+  b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
+  b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
+  sigma.calib ~ dunif(0,20) # standard deviation
+  dispersion ~ dnorm(25,sd=1) # dispersion parameter to convert prior probability into beta distribution - almost fixed quantity
+  
+  # Standard deviation for isotope ratios in rainwater 
+  sd.unknown[2]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
+  sd.unknown[1]<-sigma.calib
+  
+  
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
+  for (i in 1:nind.unkn){
+    
+    # Potential local distribution based on timing used as prior (from WOCO_migration_model.R - could be integrated into this model)
+    logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
+      b.mig.week*(unk.week[i])     ### week effect from migration model
+    p.nonlocal.prior[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from migration model
+    
+    # Latent indicator for isotope distribution based on beta distribution of shooting time prior
+    alpha[i] <- max(1e-3, p.nonlocal.prior[i] * dispersion)   ## with safeguard to avoid values <0
+    beta[i]  <- max(1e-3, (1 - p.nonlocal.prior[i]) * dispersion)   ## with safeguard to avoid values <0
+    p.nonlocal[i] ~ dbeta(alpha[i], beta[i])
+    z[i] ~ dbern(p.nonlocal[i])  ## indicator variable from binomial draw of which isotope distribution fits better
+    
+    # Potential local distribution based on isotope ratio
+    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
+    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]  ### local expected feather isotope distribution
+    
+    # evaluate origin feather isotope value from plausible target distributions
+    d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
+    
+    
+  } #i
+  
+  
+}) ## end of nimble code chunk
+
+
+
+
+## 5.2. run model in NIMBLE ------------------------------------------
+### this takes 600 sec for 100000 iterations and converges in that time
+tic()
+
+woco.iso.migprior <- nimbleMCMC(code = woco.orig.model.migprior,
+                       constants=iso.constants,
+                       data = iso.data,
+                       inits = iso.inits,
+                       monitors = parameters.iso,
+                       thin=5,
+                       niter = n.iter,
+                       nburnin = n.burnin,
+                       nchains = n.chains,
+                       progressBar = getNimbleOption("MCMCprogressBar"),
+                       summary=T)
+toc() 
+
+
+
+
+
+## 5.3. SAVE MODEL OUTPUT AND ASSESS CONVERGENCE --------------------------------------------------------------
+
+out<- as.data.frame(MCMCsummary(woco.iso.migprior$samples, params=c("b.rain","b.age","int.rain","sigma.calib","dispersion"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out$parameter<-row.names(out)
+names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
+#out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
+out
+fwrite(out,"output/woco_iso_time_origin_parm_estimates_mig_prior.csv")
+
+
+
+## 5.4 summarise probabilities across individuals ------------------------------------------
+
+# compile all the samples
+samples.migprior <- rbind(woco.iso.migprior$samples$chain1,woco.iso.migprior$samples$chain2,woco.iso.migprior$samples$chain3,woco.iso.migprior$samples$chain4)
+mean.p.nonlocal.migprior <- as_tibble(samples.migprior[,grep("p.nonlocal\\[", colnames(samples.migprior))]) %>%
+  gather(key="parameter",value="p.nonlocal") %>%
+  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+  mutate(prior="only migration")
+
+
+# summarise across SUI
+
+out.sui<- mean.p.nonlocal.migprior %>%
+  group_by(age,ctn,ind) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age) %>%
+  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  select(-age)  %>%
+  mutate(prior="only migration") %>%
+  bind_rows(out.sui)
+out.sui  
+fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
+
+
+# summarise by Canton
+
+out.ctn<- mean.p.nonlocal.migprior %>%
+  group_by(age,ctn,ind) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn) %>%
+  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  ungroup() %>%
+  select(-age)  %>%
+  mutate(prior="only migration") %>%
+  bind_rows(out.ctn)
+out.ctn
 fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
 
 
 
 
-## 4.2. summarise output in graphical form ------------------------------------------
+
+## 5.5. summarise output in graphical form ------------------------------------------
 
 # LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
 require(png)
@@ -322,11 +488,12 @@ imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fu
 wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
 
-FIGURE<-mean.p.nonlocal %>%
-  group_by(age,ctn,ind) %>%
+
+FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
-  group_by(age,ctn) %>%
+  group_by(age,ctn, prior) %>%
   summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
   
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
@@ -335,17 +502,15 @@ FIGURE<-mean.p.nonlocal %>%
   ggplot(aes(x=ctn, y=for.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  facet_wrap(~prior, ncol = 1) +
+  
+  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
+  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
   
   ## format axis ticks
-  labs(y="Prop. of shot woodcock that are not local",x="Swiss Canton",col="") +
+  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
   scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
-  # scale_fill_viridis_d(alpha=0.3,begin=0,end=0.98,direction=1) +
-  # scale_color_viridis_d(alpha=1,begin=0,end=0.98,direction=1) +
-  # 
-  ### add the bird icons
-  annotation_custom(gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18)+
-  annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35)+
-  
+
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
         panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
@@ -361,19 +526,75 @@ FIGURE<-mean.p.nonlocal %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.85,0.15),
+        legend.position.inside=c(0.85,0.65),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
-FIGURE
-
-ggsave(plot=FIGURE,
-       filename="output/woco_iso_time_origin_probability_estimates.jpg", 
-       device="jpg",width=11, height=8)
+FIGURE2
 
 
+ggsave(plot=FIGURE2,
+       filename="output/woco_iso_time_origin_probability_estimates_comb_prior.jpg", 
+       device="jpg",width=9, height=12)
 
 
-# 5. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES ----------------------------------
+
+
+
+
+# 6. SUMMARY FIGURES FOR MANUSCRIPT ----------------------------------
+
+## 6.1. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
+woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
+FIGURES2<-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
+  geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
+  
+  ## format axis ticks
+  labs(y="Number of woodcock feathers",
+       x=expression(paste(delta^{2}, "H (\u2030)")),
+       col="Origin", fill="Origin") +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        axis.text=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.85,0.85),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES2
+#ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
+
+
+## report numbers in manuscript
+table(ORIG_WC$AGE)
+length(UNK_WC$dH)/9260
+table(UNK_WC$AGE)
+summary(ORIG_WC$dH)
+summary(UNK_WC$dH)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 7. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES ----------------------------------
 plot_list <- list()
 for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 
