@@ -275,7 +275,7 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_iso_time_origin_parm_estimates_comb_prior.csv")
+#fwrite(out,"output/woco_iso_time_origin_parm_estimates_comb_prior.csv")
 #out<-fread("output/woco_iso_origin_parm_estimates.csv")
 
 
@@ -298,18 +298,18 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal\\[", colnames(samples))])
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="combined abundance and migration")
-
+fwrite(mean.p.nonlocal,"output/WOCO_nonlocal_probs_comb_prior.csv")
 
 mean.p.nonlocal %>% filter(is.na(age))
 
 # summarise across SUI
 
 out.sui<- mean.p.nonlocal %>%
-  group_by(age,ctn,ind) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
+  #group_by(age,ctn,ind) %>%
+  #summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  #ungroup() %>%
   group_by(age) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   select(-age) %>%
   mutate(prior="combined abundance and migration")
@@ -320,11 +320,11 @@ out.sui
 # summarise by Canton
 
 out.ctn<- mean.p.nonlocal %>%
-  group_by(age,ctn,ind) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
+  #group_by(age,ctn,ind) %>%
+  #summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  #ungroup() %>%
   group_by(age,ctn) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   ungroup() %>%
   select(-age) %>%
@@ -436,16 +436,16 @@ mean.p.nonlocal.migprior <- as_tibble(samples.migprior[,grep("p.nonlocal\\[", co
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="only migration")
-
+fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
 
 # summarise across SUI
 
 out.sui<- mean.p.nonlocal.migprior %>%
-  group_by(age,ctn,ind) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
+  #group_by(age,ctn,ind) %>%
+  #summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  #ungroup() %>%
   group_by(age) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   select(-age)  %>%
   mutate(prior="only migration") %>%
@@ -457,11 +457,11 @@ fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
 # summarise by Canton
 
 out.ctn<- mean.p.nonlocal.migprior %>%
-  group_by(age,ctn,ind) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
+  #group_by(age,ctn,ind) %>%
+  #summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  #ungroup() %>%
   group_by(age,ctn) %>%
-  summarise(foreign.med=median(p.nonlocal.mean),foreign.lcl=quantile(p.nonlocal.mean,0.025), foreign.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   ungroup() %>%
   select(-age)  %>%
@@ -475,6 +475,9 @@ fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
 
 
 ## 5.5. summarise output in graphical form ------------------------------------------
+
+# mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
+# mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
 
 # LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
 require(png)
@@ -502,7 +505,7 @@ FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   ggplot(aes(x=ctn, y=for.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  facet_wrap(~prior, ncol = 1) +
+  facet_wrap(~prior, ncol = 2) +
   
   # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
   # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
@@ -526,7 +529,7 @@ FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.85,0.65),
+        legend.position.inside=c(0.90,0.85),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE2

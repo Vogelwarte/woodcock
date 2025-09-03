@@ -60,3 +60,5 @@ literature/
 ## files that are too large
 output/woco_iso_time_origin_model.rds
 data/GLOBCOVER_L4_200901_200912_V2.3.tif
+output/WOCO_nonlocal_probs_mig_prior.csv
+output/WOCO_nonlocal_probs_comb_prior.csv
