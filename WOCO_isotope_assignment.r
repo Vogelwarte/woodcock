@@ -67,7 +67,7 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 woco<-fread("data/WOCO_isotopes.csv")
 #woco<-read_excel("output/IsotopeAssignment_Tables.xlsx", sheet="Table14_IsotopeAssignments_Hunt")
-
+table(woco$AGE)
 
 ## 1.1. PLOT THE DIFFERENT d2H isotope values ----
 
@@ -971,7 +971,7 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 
 } #ct
 
-grid.arrange(grobs=plot_list,ncol=2)
+grid.arrange(grobs=plot_list,ncol=3)
 ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
        device="jpg",width=8, height=12)
 

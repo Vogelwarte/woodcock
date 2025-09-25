@@ -6,7 +6,6 @@
 ## creating tables and figures for manuscript by loading in output from models and raw data
 
 
-
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -20,10 +19,22 @@ library(dplyr)
 library(janitor)
 filter<-dplyr::filter
 select<-dplyr::select
+require(png)
+library(grid)
+library(gtable)
+require(jpeg)
+library(magick)
+
+
 
 ## set root folder for project
 setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+imgGun<-readPNG("manuscript/rifleicon.png")
+gunicon <- rasterGrob(imgGun, interpolate=TRUE)
+imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
+wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
+
 
 # Load data ---------------------------------------------------------------
 
@@ -147,18 +158,8 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
 # 3. FIGURE 1 ---------------
 
 woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
-# LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
-require(png)
-library(grid)
-library(gtable)
-require(jpeg)
-library(magick)
-imgGun<-readPNG("manuscript/rifleicon.png")
-gunicon <- rasterGrob(imgGun, interpolate=TRUE)
-imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
-wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
-FIGURE2<-woco.mig %>% 
+FIGURE1<-woco_mig %>% 
   group_by(week) %>%
   summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
   mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
@@ -184,7 +185,7 @@ FIGURE2<-woco.mig %>%
   
   ## format axis ticks
   scale_x_date(name="Week of the year", date_labels = "%d %b") +
-  scale_y_continuous(name="Cumulative proportion of woodcocks that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  scale_y_continuous(name="Cumulative proportion that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -274,36 +275,56 @@ ggsave(plot=FIGURE2,
 
 # 5. FIGURE S4 -----------------------
 
-# 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
-# prepared in WOCO_isotope_assignment.r
-load("data/woco.input.data.RData")
-try(rm(isoscape, globcover), silent=T)
-# ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds") %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  mutate(prop.remain=1-prop_mig) %>% 
+  group_by(week, Date) %>%
+  summarise(mig=quantile(prop.remain,0.5),mig.lcl=quantile(prop.remain,0.025),mig.ucl=quantile(prop.remain,0.975))
 
-## 1.1. modify data to include abundance predictions from Ornitho.ch records ----------
-## this approach is intended to address the dilution effect (when local birds are outnumbered by migrants)
+woco_abundance<-fread("data/AnnualPhenology_abundance_index.csv") %>%
+  mutate(Date=lubridate::ymd("2023-12-27") + lubridate::days(Pentade*5)) %>%
+  mutate(abund=SOPM/max(SOPM)) %>%
+  dplyr::filter(Date>=min(woco_mig$Date))
 
-woco.unk.abd.prior <- woco.unk.sf %>%
-  st_drop_geometry() %>%
-  mutate(DAY=yday(DATE), DAY_2=(yday(DATE)^2))
+shot_dates<-hist(lubridate::yday(UNK_WC$DATE), breaks=seq(250,365,7),plot=F)
+woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
+  mutate(Date=parse_date_time(as.integer(yday), orders="j")) %>%
+  mutate(abund=N/max(N)) %>%
+  mutate(Date=as.Date(Date-years(1)))
 
-woco_abundance <- woco_abundance %>%
-  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2)) %>%
-  dplyr::filter(DAY >= min(woco.unk.abd.prior$DAY)) %>%
-  dplyr::filter(DAY <= max(woco.unk.abd.prior$DAY))
+colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
 
+FIG_s4<-ggplot()+
+  geom_line(data=woco_mig, aes(x=Date, y=mig, color="Local birds"),linewidth=1) +
+  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="All birds"),linewidth=1) +
+  geom_col(data=woco_shot, aes(x=Date, y=abund, color="Shot birds"),width = 6, alpha=0.5) +
+  labs(color = "Origin") +
+  scale_color_manual(values = colors) +
+  
+  ## format axis ticks
+  scale_x_date(name="Date", date_labels = "%d %b") +
+  scale_y_continuous(name="Relative abundance of woodcocks", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=16, color="black"),
+        legend.text=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.1,0.5),
+        strip.background=element_rect(fill="white", colour="black"))
+FIG_s4
 
-m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson")
-#m2<-loess(SOPM ~ DAY, data = woco_abundance, family = "poisson")
-woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")  ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
-woco.unk.sf$abd_prior <- woco.unk.sf$abd_prior/ceiling(max(woco.unk.sf$abd_prior)) ## scale to a proportion, but round up maximum because beta prior cannot take values of 1
-summary(woco.unk.sf$abd_prior)
-hist(woco.unk.sf$abd_prior)
+ggsave(plot=FIG_s4,
+       filename="manuscript/Figure_S4.jpg",
+       device="jpg",width=11, height=8)
 
-ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
-  geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
-  geom_smooth(method=loess, se=T) +
-  geom_line(data=woco.unk.sf, aes(x=yday(DATE),y=abd_prior), col="firebrick")
 
 
 
@@ -311,15 +332,32 @@ ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
 
 # 7. FIGURE S2 ----------------------------------
 load("data/woco.input.data.RData")
-
 woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
-FIGURES2<-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
-  geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
+
+binwidth <- 5
+breaks <- seq(min(woco$dH,na.rm=T), max(woco$dH,na.rm=T) + binwidth, by = binwidth)
+FIGURES2<-woco %>%
+  mutate(bin = cut(dH, breaks = breaks, right = FALSE)) %>%
+  group_by(bin) %>%
+  mutate(bin_median = median(dH)) %>%
+  ungroup() %>%
+  group_by(ORIGINE, bin, bin_median) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(ORIGINE) %>%
+  mutate(percentage = count / sum(count)) %>%
+  
+  ggplot(aes(x = round(bin_median, 1), y = percentage, fill = ORIGINE)) +
+  geom_bar(stat = "identity", position = position_dodge(width=2.5,preserve = "single"), alpha = 0.5, width = binwidth*0.8) +
+
+  #geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
+  #geom_histogram(aes(y = ..count.. / tapply(..count.., ..PANEL.., sum)[..PANEL..]),binwidth = 5,  alpha = 0.5,position = "dodge") +
+  #geom_histogram(aes(y=stat(density)),binwidth=,alpha=0.5,position = position_dodge(width=2.5))+  
   
   ## format axis ticks
-  labs(y="Number of woodcock feathers",
+  labs(y="Proportion of woodcock feathers",
        x=expression(paste(delta^{2}, "H (\u2030)")),
        col="Origin", fill="Origin") +
+  scale_y_continuous(labels = scales::percent_format(scale=100)) +
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
@@ -335,11 +373,11 @@ FIGURES2<-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.85,0.85),
+        legend.position.inside=c(0.13,0.75),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURES2
-#ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
+#ggsave(FIGURES2, filename="manuscript/FIGURE_S2.jpg",device="jpg",width=12, height=9)
 
 
 ## report numbers in manuscript
@@ -363,6 +401,18 @@ summary(UNK_WC$dH)
 
 
 # 7. FIGURE S3 ----------------------------------
+rm(list=ls())
+load("data/woco.input.data.RData")
+try(rm(isoscape, globcover), silent=T)
+
+woco.unk.sf <- woco.unk.sf %>%
+  filter(!is.na(AGE)) %>%
+  filter(!is.na(dH)) %>%
+  #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
+  filter(!is.na(d2h_GS))
+
+
+
 plot_list <- list()
 for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   
@@ -404,7 +454,9 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   
 } #ct
 
-grid.arrange(grobs=plot_list,ncol=2)
+grid.arrange(grobs=plot_list,ncol=3)
+ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
+       device="jpg",width=8, height=12)
 ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
        device="jpg",width=8, height=12)
 
