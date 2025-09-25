@@ -1,23 +1,10 @@
 ###########################################################################
-##### WOODCOCK DEPARTURE TIME ANALYSIS DATA PREPARATION--------  ############################
+##### WOODCOCK AUTUMN MIGRATION MANUSCRIPT TABLES AND FIGURES--------  ############################
 ###########################################################################
 
-## written by Steffen Oppel on 30 Oct 2024 to initiate analysis
-## goal is to estimate WHEN birds depart so that hunters can be confident they don't shoot Swiss birds
-## federal regulation permits shooting from 15 Sept to 16 December
+## written by Steffen Oppel on 25 Sept 2025
+## creating tables and figures for manuscript by loading in output from models and raw data
 
-## QUESTIONS TO MURDY:
-# what does 'censor' mean? check with Michi if censoring necessary for migration
-# what temporal resolution do we want (weekly ok)? yes
-# extent of season (Sept - Nov), what is the intermittent dip in effort? monthly capture events
-# do we have a metric of observation effort?
-# what are age categories 1-8? EURING Code? Only needed if age affects departure or survival
-# annual variation in survival, detection, migration?
-
-## UPDATED 2 JAN 2025 to include actual netting effort data (provided by Pierre Mollet)
-## used data for those occasions where available, and extrapolated remaining occasions based on linear regression with capture numbers
-
-## UPDATED 12 FEB 2025 to exclude ARGOS DATA (optional - because we are not sure about permissions)
 
 
 # Clear workspace ---------------------------------------------------------
@@ -30,6 +17,7 @@ library(lubridate)
 library(tidyverse)
 library(readxl)
 library(dplyr)
+library(janitor)
 filter<-dplyr::filter
 select<-dplyr::select
 
@@ -40,32 +28,95 @@ setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 # Load data ---------------------------------------------------------------
 
 woco <- read_excel("data/Daten_Waldschnepfe.xlsx", sheet="Data") %>%
-  # mutate(Sendertyp=ifelse(is.na(Sendertyp),"none",Sendertyp)) %>%  ## fill in missing values for type of transmitter
-  # dplyr::filter(Sendertyp!="ARGOS") %>%  ## optionally remove all ARGOS data
+  mutate(Beobachtung=ifelse(is.na(Beobachtung),"Fang",Beobachtung)) %>%  ## fill in missing values for type of transmitter
+  mutate(Sendertyp=ifelse(is.na(Sendertyp),Markierung,Sendertyp)) %>%  ## fill in missing values for type of transmitter
   rename(age=`Alter (Euring)`)
 woco
 
 
-woco %>% group_by(Ring, Markierung, Sendertyp) %>%
-  summarise(n_encounter=length(Datum)) %>%
+# 1. TABLE S1 ---------------
+unique(woco$Beobachtung)
+# weirdobs<-woco %>% filter(is.na(Beobachtung))
+# woco %>% filter(Ring %in% weirdobs$Ring)
+
+
+all_birds<-woco %>%
+  dplyr::filter(Beobachtung=="Fang") %>%
+  group_by(Ring) %>%
+  summarise(first=min(Datum),total=length(Datum)) %>%
+  mutate(season=if_else(month(first) %in% c(5,6,7,8),"breeding","migration")) %>%
   ungroup() %>%
-  mutate(N=1) %>%
-  group_by(Markierung, Sendertyp) %>%
-  summarise(N_birds=sum(N))
+  group_by(season) %>%
+  summarise(N=length(unique(Ring))) %>%
+  adorn_totals()
+
+dead_birds<-woco %>%
+  dplyr::filter(Beobachtung=="Totfund") %>%
+  group_by(Ort, Todesursache) %>%
+  summarise(N=length(unique(Ring))) %>%
+  adorn_totals()
+
+tagged_birds<-woco %>%
+  dplyr::filter(Beobachtung=="Fang") %>%
+  group_by(Ring, Sendertyp) %>%
+  summarise(first=min(Datum),total=length(Datum))
+
+argos_birds<-tagged_birds %>%
+  dplyr::filter(Sendertyp=="ARGOS")
+argos_birds %>%
+  ungroup() %>%
+  summarise(N=length(unique(Ring)))
+
+vhf_birds<-tagged_birds %>%
+  dplyr::filter(Sendertyp=="VHF") %>%
+  dplyr::filter(!(Ring %in% argos_birds$Ring))
+vhf_birds %>%
+  ungroup() %>%
+  summarise(N=length(unique(Ring)))
+
+ringonly_birds<-tagged_birds %>%
+  dplyr::filter(!(Ring %in% vhf_birds$Ring)) %>%
+  dplyr::filter(!(Ring %in% argos_birds$Ring))
+ringonly_birds %>%
+  ungroup() %>%
+  summarise(N=length(unique(Ring)))
 
 
-### CREATE A TIME SERIES DATA FRAME ###
-mindate<-min(woco$Datum)
-maxdate<-max(woco$Datum)
-timeseries<-data.frame(date=seq(mindate, maxdate, "1 month")) %>%
-  mutate(month=month(date),year=year(date)) %>%
-  mutate(ymo=as.character(format(date, format="%Y_%m"))) %>%
-  mutate(season=ifelse(month %in% c(4,5,6,7,8,9),"summer","winter")) %>%
-  mutate(col=seq_along(date))
-dim(timeseries)
+# doubletagged_birds<-woco %>%
+#   dplyr::filter(Beobachtung=="Fang") %>%
+#   dplyr::filter((Ring %in% argos_birds$Ring)) %>%
+#   group_by(Ring) %>%
+#   summarise(N=length(unique(Sendertyp))) %>%
+#   dplyr::filter(N>1)
+# 
+# woco %>%
+#   dplyr::filter(Ring %in% doubletagged_birds$Ring) %>%
+#   print(n=50)
+
+singlecaps <- woco %>%
+  group_by(Ring) %>%
+  summarise(N=length(Datum)) %>%
+  filter(N==1) %>%
+  ungroup() %>%
+  summarise(N=length(unique(Ring)))
 
 
-## check last observation per bird in study area
+
+
+
+
+# 2. FIGURE S1 ---------------
+medlast<-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  filter(Ort=="UG") %>%
+  mutate(year=year(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  mutate(jday=yday(Datum)) %>%
+  mutate(date=ymd("2023-12-31")+days(jday)) %>%
+  group_by(id) %>%
+  summarise(last=max(date)) %>%
+  ungroup() %>%
+  summarise(day=median(last))
+
 woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
   filter(Ort=="UG") %>%
   mutate(year=year(Datum)) %>%
@@ -75,8 +126,10 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
   group_by(id) %>%
   summarise(last=max(date)) %>%
   ggplot(aes(x=last)) +
-  geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),after_stat(PANEL),sum)[after_stat(PANEL)]),binwidth=7)+                               
-  scale_x_date(name="last obs in study area",date_breaks="1 week", date_labels="%d-%b")+
+  geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),after_stat(PANEL),sum)[after_stat(PANEL)]),binwidth=7)+  
+  ### add vertical lines to specify median date of last observation
+  geom_vline(aes(xintercept=medlast$day), linetype="dashed", col="firebrick", linewidth=1.5) +
+  scale_x_date(name="last observation in study area",date_breaks="1 week", date_labels="%d-%b")+
   labs(y="proportion of woodcocks") +
   theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         axis.text.x=element_text(size=12, color="black",angle=45,hjust = 1),
@@ -84,7 +137,298 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
         axis.title=element_text(size=18), 
         strip.text.x=element_text(size=18, color="black"), 
         strip.background=element_rect(fill="white", colour="black"))
-#ggsave("output/prop_woodcock_per_week_rawdat.jpg", width=7, height=6)
+#ggsave("manuscript/Figure_S1.jpg", width=8, height=6)
+
+
+
+
+
+
+# 3. FIGURE 1 ---------------
+
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
+# LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
+require(png)
+library(grid)
+library(gtable)
+require(jpeg)
+library(magick)
+imgGun<-readPNG("manuscript/rifleicon.png")
+gunicon <- rasterGrob(imgGun, interpolate=TRUE)
+imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
+wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
+
+FIGURE2<-woco.mig %>% 
+  group_by(week) %>%
+  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  
+  ggplot()+
+  geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
+  geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
+
+  ### add vertical lines to specify key dates OF OLD HUNTING TIMES
+  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
+  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey18", linewidth=2) +
+  geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
+  geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
+  geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
+  
+  
+  ### add the bird icons
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
+  
+  
+  ## format axis ticks
+  scale_x_date(name="Week of the year", date_labels = "%d %b") +
+  scale_y_continuous(name="Cumulative proportion of woodcocks that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURE1
+
+ggsave(plot=FIGURE1,
+       filename="manuscript/Figure_1.jpg", 
+       device="jpg",width=11, height=8)
+
+
+
+
+
+
+
+
+# 4. FIGURE 2 ---------------
+
+mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
+mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
+
+# LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
+require(png)
+library(grid)
+library(gtable)
+require(jpeg)
+library(magick)
+imgGun<-readPNG("manuscript/rifleicon.png")
+gunicon <- rasterGrob(imgGun, interpolate=TRUE)
+imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
+wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
+
+
+
+FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn, prior) %>%
+  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  facet_wrap(~prior, ncol = 2) +
+  
+  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
+  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
+  
+  ## format axis ticks
+  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.90,0.85),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURE2
+
+
+ggsave(plot=FIGURE2,
+       filename="output/woco_iso_time_origin_probability_estimates_comb_prior.jpg", 
+       device="jpg",width=9, height=12)
+
+
+
+# 5. FIGURE S4 -----------------------
+
+# 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
+# prepared in WOCO_isotope_assignment.r
+load("data/woco.input.data.RData")
+try(rm(isoscape, globcover), silent=T)
+# ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
+
+## 1.1. modify data to include abundance predictions from Ornitho.ch records ----------
+## this approach is intended to address the dilution effect (when local birds are outnumbered by migrants)
+
+woco.unk.abd.prior <- woco.unk.sf %>%
+  st_drop_geometry() %>%
+  mutate(DAY=yday(DATE), DAY_2=(yday(DATE)^2))
+
+woco_abundance <- woco_abundance %>%
+  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2)) %>%
+  dplyr::filter(DAY >= min(woco.unk.abd.prior$DAY)) %>%
+  dplyr::filter(DAY <= max(woco.unk.abd.prior$DAY))
+
+
+m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson")
+#m2<-loess(SOPM ~ DAY, data = woco_abundance, family = "poisson")
+woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")  ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
+woco.unk.sf$abd_prior <- woco.unk.sf$abd_prior/ceiling(max(woco.unk.sf$abd_prior)) ## scale to a proportion, but round up maximum because beta prior cannot take values of 1
+summary(woco.unk.sf$abd_prior)
+hist(woco.unk.sf$abd_prior)
+
+ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
+  geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
+  geom_smooth(method=loess, se=T) +
+  geom_line(data=woco.unk.sf, aes(x=yday(DATE),y=abd_prior), col="firebrick")
+
+
+
+
+
+# 7. FIGURE S2 ----------------------------------
+load("data/woco.input.data.RData")
+
+woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
+FIGURES2<-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
+  geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
+  
+  ## format axis ticks
+  labs(y="Number of woodcock feathers",
+       x=expression(paste(delta^{2}, "H (\u2030)")),
+       col="Origin", fill="Origin") +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        axis.text=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.85,0.85),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES2
+#ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
+
+
+## report numbers in manuscript
+table(ORIG_WC$AGE)
+length(UNK_WC$dH)/9260
+table(UNK_WC$AGE)
+summary(ORIG_WC$dH)
+summary(UNK_WC$dH)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 7. FIGURE S3 ----------------------------------
+plot_list <- list()
+for (ct in 1:length(unique(woco.unk.sf$KANTON))){
+  
+  ## get canton-wise distribution
+  woco.cnt <- woco.unk.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
+  cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
+    dplyr::select(ID,KANTON,d2h_GS,d2h_se_GS) %>%
+    rowwise() %>%
+    mutate(pot.orig.d2H=rnorm(1,d2h_GS,d2h_se_GS)) %>%
+    ungroup() %>%
+    group_by(KANTON) %>%
+    summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
+  
+  ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
+  CNT.isoscape <- ifel(WOCO.isoscape >= cnt.iso$min & WOCO.isoscape <= cnt.iso$max, 1, 0)
+  
+  ## create plot
+  plot_list[[ct]] <- ggplot(EUR) +
+    geom_sf() +
+    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h))+
+    geom_sf(data=woco.cnt,color="red") +
+    geom_sf(data=EUR, colour="grey12", fill=NA) +
+    #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
+    
+    annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
+    annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
+    scale_fill_gradient(low = 'lightgray', high = 'lightgreen', na.value=NA) +
+    
+    ## beautification of the axes
+    theme(panel.background=element_rect(fill="white", colour="black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text=element_text(size=12, color="black"),
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin= unit(rep(.5, 4), "lines"),
+          strip.text=element_text(size=18, color="black"),
+          strip.background=element_rect(fill="white", colour="black"))
+  
+} #ct
+
+grid.arrange(grobs=plot_list,ncol=2)
+ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
+       device="jpg",width=8, height=12)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
