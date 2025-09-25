@@ -17,14 +17,20 @@ library(tidyverse)
 library(readxl)
 library(dplyr)
 library(janitor)
-filter<-dplyr::filter
-select<-dplyr::select
 require(png)
 library(grid)
 library(gtable)
 require(jpeg)
 library(magick)
-
+library(sf)
+library(terra)
+library(raster)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(gridExtra)
+library(tidyterra)
+filter<-dplyr::filter
+select<-dplyr::select
 
 
 ## set root folder for project
@@ -211,18 +217,6 @@ ggsave(plot=FIGURE1,
 mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
 mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
 
-# LOAD AND MANIPULATE ICONS TO REMOVE BACKGROUND
-require(png)
-library(grid)
-library(gtable)
-require(jpeg)
-library(magick)
-imgGun<-readPNG("manuscript/rifleicon.png")
-gunicon <- rasterGrob(imgGun, interpolate=TRUE)
-imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
-wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
-
-
 
 FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   group_by(age,ctn,ind, prior) %>%
@@ -268,12 +262,85 @@ FIGURE2
 
 
 ggsave(plot=FIGURE2,
-       filename="output/woco_iso_time_origin_probability_estimates_comb_prior.jpg", 
-       device="jpg",width=9, height=12)
+       filename="manuscript/Figure_2.jpg", 
+       device="jpg",width=12, height=8)
 
+
+
+
+
+
+
+
+
+
+# 7. FIGURE S2 ----------------------------------
+load("data/woco.input.data.RData")
+woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
+
+binwidth <- 5
+breaks <- seq(min(woco$dH,na.rm=T), max(woco$dH,na.rm=T) + binwidth, by = binwidth)
+FIGURES2<-woco %>%
+  mutate(bin = cut(dH, breaks = breaks, right = FALSE)) %>%
+  group_by(bin) %>%
+  mutate(bin_median = median(dH)) %>%
+  ungroup() %>%
+  group_by(ORIGINE, bin, bin_median) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(ORIGINE) %>%
+  mutate(percentage = count / sum(count)) %>%
+  
+  ggplot(aes(x = round(bin_median, 1), y = percentage, fill = ORIGINE)) +
+  geom_bar(stat = "identity", position = position_dodge(width=2.5,preserve = "single"), alpha = 0.5, width = binwidth*0.8) +
+  
+  #geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
+  #geom_histogram(aes(y = ..count.. / tapply(..count.., ..PANEL.., sum)[..PANEL..]),binwidth = 5,  alpha = 0.5,position = "dodge") +
+  #geom_histogram(aes(y=stat(density)),binwidth=,alpha=0.5,position = position_dodge(width=2.5))+  
+  
+  ## format axis ticks
+  labs(y="Proportion of woodcock feathers",
+       x=expression(paste(delta^{2}, "H (\u2030)")),
+       col="Origin", fill="Origin") +
+  scale_y_continuous(labels = scales::percent_format(scale=100)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        axis.text=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.13,0.75),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES2
+#ggsave(FIGURES2, filename="manuscript/FIGURE_S2.jpg",device="jpg",width=12, height=9)
+
+
+## report numbers in manuscript
+table(ORIG_WC$AGE)
+length(UNK_WC$dH)/9260
+table(UNK_WC$AGE)
+summary(ORIG_WC$dH)
+summary(UNK_WC$dH)
 
 
 # 5. FIGURE S4 -----------------------
+UNK_WC<-woco %>% dplyr::filter(ORIGINE=="unknown") %>%
+  dplyr::filter(JAGDT==1) %>%
+  dplyr::filter(!is.na(DATE)) %>%
+  dplyr::filter(!is.na(dH)) %>%
+  mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+  rename(DATE=Date)
+UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
 
 woco_mig<-readRDS("output/woco_mig_depart_simulation.rds") %>%
   mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
@@ -323,75 +390,7 @@ FIG_s4
 
 ggsave(plot=FIG_s4,
        filename="manuscript/Figure_S4.jpg",
-       device="jpg",width=11, height=8)
-
-
-
-
-
-
-# 7. FIGURE S2 ----------------------------------
-load("data/woco.input.data.RData")
-woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
-
-binwidth <- 5
-breaks <- seq(min(woco$dH,na.rm=T), max(woco$dH,na.rm=T) + binwidth, by = binwidth)
-FIGURES2<-woco %>%
-  mutate(bin = cut(dH, breaks = breaks, right = FALSE)) %>%
-  group_by(bin) %>%
-  mutate(bin_median = median(dH)) %>%
-  ungroup() %>%
-  group_by(ORIGINE, bin, bin_median) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  group_by(ORIGINE) %>%
-  mutate(percentage = count / sum(count)) %>%
-  
-  ggplot(aes(x = round(bin_median, 1), y = percentage, fill = ORIGINE)) +
-  geom_bar(stat = "identity", position = position_dodge(width=2.5,preserve = "single"), alpha = 0.5, width = binwidth*0.8) +
-
-  #geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
-  #geom_histogram(aes(y = ..count.. / tapply(..count.., ..PANEL.., sum)[..PANEL..]),binwidth = 5,  alpha = 0.5,position = "dodge") +
-  #geom_histogram(aes(y=stat(density)),binwidth=,alpha=0.5,position = position_dodge(width=2.5))+  
-  
-  ## format axis ticks
-  labs(y="Proportion of woodcock feathers",
-       x=expression(paste(delta^{2}, "H (\u2030)")),
-       col="Origin", fill="Origin") +
-  scale_y_continuous(labels = scales::percent_format(scale=100)) +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.minor = element_blank(),
-        plot.margin = margin(1,1,1,1, "cm"),
-        axis.text=element_text(size=14, color="black"),
-        axis.title=element_text(size=16),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=14, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.13,0.75),
-        strip.text=element_text(size=18, color="black"),
-        strip.background=element_rect(fill="white", colour="black"))
-FIGURES2
-#ggsave(FIGURES2, filename="manuscript/FIGURE_S2.jpg",device="jpg",width=12, height=9)
-
-
-## report numbers in manuscript
-table(ORIG_WC$AGE)
-length(UNK_WC$dH)/9260
-table(UNK_WC$AGE)
-summary(ORIG_WC$dH)
-summary(UNK_WC$dH)
-
-
-
-
-
-
+       device="jpg",width=12, height=8)
 
 
 
@@ -401,9 +400,73 @@ summary(UNK_WC$dH)
 
 
 # 7. FIGURE S3 ----------------------------------
-rm(list=ls())
-load("data/woco.input.data.RData")
-try(rm(isoscape, globcover), silent=T)
+woco<-fread("data/WOCO_isotopes.csv")
+
+woco$dH<-(woco$dH_scaled - 20.701)/0.979
+woco %>% dplyr::filter(is.na(dH))
+ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
+  dplyr::filter(!is.na(dH)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
+UNK_WC<-woco %>% dplyr::filter(ORIGINE=="UNBEKANNT") %>%
+  dplyr::filter(JAGDT==1) %>%
+  dplyr::filter(!is.na(DATE)) %>%
+  dplyr::filter(!is.na(dH)) %>%
+  mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+  rename(DATE=Date)
+UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
+rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
+  mutate(sd=parse_date_time(DATE, orders="dmy")) %>%
+  mutate(feather_growth_date=if_else(AGE=="Adulte",
+                                     if_else(month(sd)<7,
+                                             ymd(paste(year(sd)-1,"-06-15")),
+                                             ymd(paste(year(sd),"-06-15"))),
+                                     if_else(month(sd)<9,
+                                             ymd(paste(year(sd)-1,"-05-15")),
+                                             ymd(paste(year(sd),"-08-15"))))) %>%
+  mutate(feather_sampling_date=as.Date(sd)) %>%
+  dplyr::select(-DATE,-sd,-AGE)
+
+bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
+SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
+  st_transform(st_crs('EPSG:4326')) # Project to WGS84
+EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_crop(bbox) %>%
+  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
+  dplyr::select(admin,name,adm0_a3,geometry)
+woco.sf <- ORIG_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+  crop(extent(SUI))
+woco.countries <- EUR %>%
+  dplyr::filter(admin %in% c("Ukraine","Switzerland","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+forest.mat<-matrix(0, nrow=3, ncol=3)
+forest.mat[,1]<-c(11,40,110)  ## from values for conversion matrix
+forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
+forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
+globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
+  crop(woco.countries) %>%
+  terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
+  terra::project(.,crs(isoscape))
+WOCO.isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+  crop(woco.countries)
+globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
+WOCO.isoscape <- WOCO.isoscape*globcover
+rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
+rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+woco.vect<-terra::vect(woco.sf)
+woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
+woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
+woco.unk.sf <- UNK_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+woco.unk.vect<-terra::vect(woco.unk.sf)
+
+woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
+woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+woco.unk.sf %>% filter(is.na(AGE))
+
+
 
 woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
@@ -454,12 +517,9 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   
 } #ct
 
-grid.arrange(grobs=plot_list,ncol=3)
-ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
+grid.arrange(grobs=plot_list,ncol=2)
+ggsave(filename="manuscript/Figure_S3.jpg", 
        device="jpg",width=8, height=12)
-ggsave(filename="output/woco_iso_origin_local_maps.jpg", 
-       device="jpg",width=8, height=12)
-
 
 
 
@@ -530,297 +590,4 @@ woco %>% group_by(Ring, Markierung, Sendertyp) %>%
 
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# DATA PREPARATION APPROACH
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## for each individual and year, create weekly occasions for Sept to Nov
-## use data from following year to determine whether bird survived or not
-# True States (S) - these are often unknown and cannot be observed
-# 1 alive in study area
-# 2 dead in study area
-# 3 alive outside study area (after migration)
-# 4 dead outside study area (shot after after migration)
 
-  # Observed States (O) - these are based on the actual transmission history
-  # 1 Bird (re)captured alive or recorded via transmitter in study area
-  # 2 Bird recorded via transmitter outside study area
-  # 3 Dead bird recovered  in study area
-  # 4 Dead bird recovered  outside study area
-  # 5 No signal (=not observed)
-
-### inspect individual that lost the logger (happened 3 days after last live location - does not yield additional info)
-woco %>% filter(Beobachtung=="Senderfund")
-woco %>% filter(Ring_num==112985) %>% arrange(Datum)
-
-### inspect individual that was caught in France
-woco %>% filter(Beobachtung=="Fang") %>% filter(Ort!="UG")
-woco %>% filter(Ring_num==115155) %>% arrange(Datum)
-
-
-# CREATE ANNUAL ENCOUNTER HISTORY  ---------------------------------------------------------------
-woco_ch <- woco %>%
-  mutate(year=year(Datum)) %>%
-  mutate(id=paste(Ring_num,year, sep="_")) %>%
-  select(id, Ring_num,year,Datum,Beobachtung,Markierung,Ort) %>%
-  filter(Beobachtung!="Senderfund") %>%
-  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
-  mutate(obs=1) %>%
-  group_by(Ring_num, year) %>%
-  summarise(N=sum(obs)) %>%
-  spread(key=year, value=N, fill=0)
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# PREPARE ANNUAL CAPTURE HISTORIES
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-### we only want weeks from Aug - December
-### but some birds are marked earlier in the year and are then shot - cannot have a dead state without a previous marking occasion
-### summarised all encounters prior to August and entered it in first August week
-### weekly encounter history ####
-woco_ann_ch_true<-woco %>%
-  mutate(year=year(Datum), week=week(Datum)) %>%
-  mutate(id=paste(Ring_num,year, sep="_")) %>%
-  select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
-  mutate(week=ifelse(week<31,31,week)) %>%
-  filter(week>30) %>%
-  mutate(week=paste0('wk',week)) %>%
-  filter(Beobachtung!="Senderfund") %>%
-  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
-  mutate(TS=ifelse(Beobachtung=="Fang",1,
-                   ifelse((Beobachtung=="Senderlokalisation" & Ort=="UG"),1,
-                          ifelse((Beobachtung=="Senderlokalisation" & Ort!="UG"),3,
-                                 ifelse((Beobachtung=="Totfund" & Ort=="UG"),2,
-                                        ifelse((Beobachtung=="Totfund" & Ort!="UG"),4,99)))))) %>% ## there should be no 99filter(TS==99)
-  group_by(id, week) %>%
-  summarise(N=max(TS)) %>%
-  spread(key=week, value=N, fill=NA) %>%
-  mutate(wk54=NA)  ## create blank column for records past the migration season
-
-woco_ann_ch_obs<-woco %>%
-  mutate(year=year(Datum), week=week(Datum)) %>%
-  mutate(id=paste(Ring_num,year, sep="_")) %>%
-  select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
-  mutate(week=ifelse(week<31,31,week)) %>%
-  filter(week>30) %>%
-  mutate(week=paste0('wk',week)) %>%
-  #filter(month(Datum) >7) %>%
-  filter(Beobachtung!="Senderfund") %>%
-  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
-  mutate(OS=ifelse(Beobachtung=="Fang",1,
-                   ifelse((Beobachtung=="Senderlokalisation" & Ort=="UG"),1,
-                          ifelse((Beobachtung=="Senderlokalisation" & Ort!="UG"),2,
-                                 ifelse((Beobachtung=="Totfund" & Ort=="UG"),3,
-                                        ifelse((Beobachtung=="Totfund" & Ort!="UG"),4,5)))))) %>%
-  group_by(id, week) %>%
-  summarise(N=max(OS)) %>%
-  spread(key=week, value=N, fill=5) %>%
-  mutate(wk54=5)  ## create blank column for records past the migration season
-
-
-woco_tag_mat<- woco %>%
-  mutate(year=year(Datum), week=week(Datum)) %>%
-  mutate(id=paste(Ring_num,year, sep="_")) %>%
-  select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
-  mutate(week=ifelse(week<31,31,week)) %>%
-  filter(week>30) %>%
-  mutate(week=paste0('wk',week)) %>%
-  #filter(month(Datum) >7) %>%
-  filter(Beobachtung!="Senderfund") %>%
-  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
-  mutate(tag=ifelse(Markierung=="Sender",1,0)) %>%
-  group_by(id) %>%
-  summarise(tag=max(tag))
-
-
-### CREATE BLANK MATRICES TO HOLD INFORMATION ABOUT TRUE AND OBSERVED STATES ###
-
-woco.obs.matrix<-woco_ann_ch_obs %>% arrange(id)
-woco.state.matrix<-woco_ann_ch_true %>% arrange(id)
-tag<-as.data.frame(woco_tag_mat %>% arrange(id) %>% select(tag))[,1]
-woco.eff.matrix<-woco_ann_ch_obs %>% arrange(id)
-dim(woco.obs.matrix)
-length(tag)
-
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# CREATE EFFORT MATRIX BASED ON ACTUAL NETTING EFFORT
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-### full matrix of records to be used to calibrate effort data from netting
-effort_mat<- woco %>%
-  mutate(year=year(Datum), week=week(Datum)) %>%
-  mutate(week=ifelse(week<31,31,week)) %>%
-  mutate(obs=1) %>%
-  filter(week>30) %>%
-  mutate(week=paste0('wk',week)) %>%
-  filter(Beobachtung!="Senderfund") %>%
-  filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
-  group_by(year,week) %>%
-  summarise(eff=sum(obs)) %>%
-  spread(key=week,value=eff, fill=0) %>%
-  mutate(wk54=2)  ## create blank column for records past the migration season
-
-### summary of actual netting effort 
-netting <- read_excel("data/Data_Aufwand_Nov2024.xlsx", sheet="Tabelle1") %>%
-  mutate(effort=(`Länge (m)`*`Dauer (min)`)/60) %>%
-  mutate(year=year(Datum), week=week(Datum)) %>%
-  mutate(week=ifelse(week<31,31,week)) %>%
-  filter(week>30) %>%
-  mutate(week=paste0('wk',week)) %>%
-  group_by(year,week) %>%
-  summarise(tot_eff=sum(effort))
-  
-### calibrate relationship between netting effort and number of records
-effort_mat %>% filter(year %in% c(2016,2017,2018)) %>%
-  gather(key="week", value="exp_eff",-year) %>%
-  left_join(netting, by=c("year","week")) %>%
-  filter(!is.na(tot_eff)) %>%
-  
-  ggplot(aes(x=tot_eff, y=exp_eff)) +
-  geom_point(aes(col=week),size=2.5) +
-  geom_smooth(method="lm") +
-  labs(x="Weekly net metre hours", y="Total N of woodcock captures in UG") +
-  theme(legend.position="none")
-
-## fit linear regression
-calib_dat<-effort_mat %>% filter(year %in% c(2016,2017,2018)) %>%
-  gather(key="week", value="exp_eff",-year) %>%
-  left_join(netting, by=c("year","week")) %>%
-  filter(!is.na(tot_eff))
-eff_pred<-lm(tot_eff~0+exp_eff, data=calib_dat) ## forced through origin
-
-
-## interpolate all occassions without actual netting effort data
-effort<-effort_mat %>%
-  gather(key="week", value="exp_eff",-year) %>%
-  ungroup() %>%
-  left_join(netting, by=c("year","week"))
-effort$pred_eff<-predict(eff_pred, newdat=effort) ## predict effort based on linear model
-effort_mat<-effort %>%
-  mutate(eff=ifelse(is.na(tot_eff),pred_eff,tot_eff)) %>% ## use the predicted effort for occasions when no actual effort is available
-  mutate(scale_eff=scale(eff)) %>%
-  select(year,week,scale_eff) %>%
-  spread(key=week,value=scale_eff)
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# CREATE CAPTURE HISTORY FOR SURVIVAL ESTIMATIONS
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-### FILL MATRICES WITH STATE INFORMATION ###
-for(i in 1:nrow(woco.obs.matrix)){
-  
-  ### extract ind and year
-  yr<-separate_wider_delim(woco_ann_ch_obs[i,],cols="id",delim="_", names=c('ring','year'))$year
-  rn<-separate_wider_delim(woco_ann_ch_obs[i,],cols="id",delim="_", names=c('ring','year'))$ring
-  
-  ### add effort to individual matrix (because nimble does not allow dynamic indexing)
-  woco.eff.matrix[i,2:dim(woco.obs.matrix)[2]]<-effort_mat[effort_mat$year==yr,2:dim(woco.obs.matrix)[2]]
-  woco.eff.matrix[i,dim(woco.obs.matrix)[2]]<-sum(effort_mat[effort_mat$year==yr,2:20])  ### effort for following year is the sum across many months
-  
-  ### extract start and end dates for selected bird
-  daterange<-woco %>%
-    filter(Ring_num==rn) %>%
-    filter(Beobachtung!="Senderfund") %>%
-    filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
-    summarise(first=min(Datum),last=max(Datum))
-  
-  ### ASSIGN OBSERVED STATES
-  startcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]!=5))
-  if(startcol>1){
-    if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol)]<-5} else {
-      woco.obs.matrix[i,2:(startcol)]<-NA}
-  }
-
-  stopcol<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<5))
-  if((stopcol+1)<dim(woco.obs.matrix)[2]){
-    if(year(daterange$last)>yr) {woco.obs.matrix[i,dim(woco.obs.matrix)[2]]<-2} else {  ## birds that survived until next year are labelled to have been recorded outside study area
-      woco.obs.matrix[i,min((stopcol+2),dim(woco.obs.matrix)[2]):dim(woco.obs.matrix)[2]]<-5}
-  }
-
-  
-  ### ENSURE THAT DEAD BIRDS STAY DEAD
-  if(TRUE %in% (c(3,4) %in% woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]])){
-    deadcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]] %in% c(3,4)))
-    woco.obs.matrix[i,min((deadcol+2),dim(woco.obs.matrix)[2]):dim(woco.obs.matrix)[2]]<-woco.obs.matrix[i,(deadcol+1)]  ## assign the same state as last observed for rest of time series
-  }
-  
-  ### ENSURE THAT LOCAL BIRDS STAY LOCAL
-  ## there are very few 'excursions' out of the study area, but we do not want to model those, so we eliminate any state other than 1 prior to or between states of 1
-  startcolIN<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]<5))
-  stopcolIN<-max(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]==1))
-  if(stopcolIN>startcolIN){
-    for(col in (startcolIN+1):(stopcolIN+1)) {
-      if(!is.na(woco.obs.matrix[i,col])){woco.obs.matrix[i,col]<-ifelse(woco.obs.matrix[i,col]==5,5,1)}  ## assign everything to 1 except the not observed state
-    }
-  }
-
-  ## ASSIGN INITIAL TRUE STATE (to initialise z-matrix of model)
-  ### this needs careful manipulation to appropriately configure intermediate 0s
-  startcol<-min(which(!is.na(woco.state.matrix[i,2:dim(woco.state.matrix)[2]])))
-  stopcol<-max(which(!is.na(woco.state.matrix[i,2:dim(woco.state.matrix)[2]])))  
-  startstate<-woco.state.matrix[i,startcol+1]
-  endstate<-woco.state.matrix[i,stopcol+1]
-  if(startcol>1){
-    if(year(daterange$first)<yr) {woco.state.matrix[i,2:startcol]<-startstate} ## anything before first obs gets same state as first obs
-  }
-  
-  if((stopcol+1)<dim(woco.state.matrix)[2]){
-    woco.state.matrix[i,min((stopcol+2),dim(woco.state.matrix)[2]):dim(woco.state.matrix)[2]]<-endstate ## anything after last obs gets same state as last obs
-  }
-  
-  if(stopcol>(startcol+1)){ ## only needed if there is a chance of intermediate gaps between start and stopcol
-    for(col in (startcol+1):stopcol) {
-    woco.state.matrix[i,col]<-ifelse(is.na(woco.state.matrix[i,col]),woco.state.matrix[i,col-1],woco.state.matrix[i,col]) ## anything inbetween the start and stop column gets the previous state unless it is known
-  }}
-  
-  if(year(daterange$last)>yr) {
-    woco.state.matrix[i,dim(woco.state.matrix)[2]]<-3  ## last column is always alive outside study area if bird also recorded next year
-  }
-  if(stopcolIN>startcolIN){
-    for(col in (startcolIN+1):(stopcolIN+1)) {
-      woco.state.matrix[i,col]<-1  ## assign everything to 1 for true state
-    }
-  }
-}
-
-
-
-#### Convert to numeric matrices that NIMBLE can loop over
-y.telemetry<-as.matrix(woco.obs.matrix[,2:(dim(woco.state.matrix)[2])])
-z.telemetry<-as.matrix(woco.state.matrix[,2:(dim(woco.state.matrix)[2])])
-
-
-#### REMOVE individuals with no information (i.e. those that left or were shot before August in a given year)
-noninfobirds<-which(apply(y.telemetry, 1, function(x) length(unique(x)) == 1) == TRUE)
-y.telemetry<-y.telemetry[-noninfobirds,]
-z.telemetry<-z.telemetry[-noninfobirds,]
-woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
-woco.eff.matrix<-woco.eff.matrix[-noninfobirds,]
-tag<-tag[-noninfobirds]
-
-#### RETAIN ONLY individuals that were once seen alive in study area (all others have no value for estimating WHEN live birds leave study area)
-UKbirds<-which(apply(y.telemetry, 1, function(x) 1 %in% unique(x)) == TRUE)
-y.telemetry<-y.telemetry[UKbirds,]
-z.telemetry<-z.telemetry[UKbirds,]
-woco_ann_ch_obs<-woco_ann_ch_obs[UKbirds,]
-woco.eff.matrix<-woco.eff.matrix[UKbirds,]
-tag<-tag[UKbirds]
-
-#### PREPARE A MATRIX OF WEEKS
-nyears<-dim(woco_ch)[2]-1
-nweeks<-dim(y.telemetry)[2]
-nind<-dim(y.telemetry)[1]
-week<-seq(1:nweeks)
-year<-as.numeric(as.factor(separate_wider_delim(woco_ann_ch_obs,cols="id",delim="_", names=c('ring','year'))$year))
-effort<-woco.eff.matrix[,-1]
-
-#### create vector of first marking and of last alive record
-get.first.telemetry<-function(x)min(which(!is.na(x)))
-get.last.telemetry<-function(x)max(which(!is.na(x) & x<6))
-f.telemetry<-apply(y.telemetry,1,get.first.telemetry)
-l.telemetry<-apply(y.telemetry,1,get.last.telemetry)
-
-
-############# SAVE  PREPARED DATA ----------
-save.image("data/woco_mig_input_no_argos.RData")
