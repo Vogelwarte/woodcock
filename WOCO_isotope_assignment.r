@@ -24,6 +24,9 @@
 ## UPDATE 3 July 2025:
 ## tried to add a time distribution for monitoring data
 
+## received new known origin data from Andrew Hoodless on 28 Sept 2025
+## included those data for calibration
+
 
 rm(list=ls())
 library(data.table)
@@ -167,6 +170,15 @@ UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
 dim(ORIG_WC)
 dim(UNK_WC)
 
+### 1.4.1. add data of known origin provided by andrew Hoodless
+ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
+  mutate(ADULTE=ifelse(Age=="Adult",1,0),PROVENANCE_voigt=as.character(LocationCode),
+         AGE=ifelse(Age=="Adult", "Adulte","Juvénile")) %>%
+  rename(ID=RefID, KANTON=Region,
+         DATE=Date,dH=DHF,LATITUDE=Latitude,LONGITUDE=Longitude) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+  bind_rows(ORIG_WC)
+dim(ORIG_WC)
 
 ## 1.5. EXTRACT GROWTH SEASON RAIN ISOTOPES ----
 ## sampled feathers are the first secondary in shot birds and greater coverts in live birds
@@ -220,7 +232,7 @@ woco.sf <- ORIG_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 
 
-ggplot(SUI) +
+ggplot(EUR) +
   geom_sf() +
   geom_sf(data=woco.sf,color="red")
 
@@ -306,33 +318,33 @@ woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 
 
 ## 2.4.3. create equation to link rainwater to d2H of feather -------
-## SUPERSEDED BY NIMBLE MODEL BELOW
-# ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
-#   geom_point() +
-#   geom_smooth(method="lm") +
-#   labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
-#   ## beautification of the axes
-#   theme(panel.background=element_rect(fill="white", colour="black"),
-#         panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
-#         panel.grid.minor = element_blank(),
-#         axis.text=element_text(size=16, color="black"),
-#         axis.title=element_text(size=18),
-#         legend.position="inside",
-#         legend.position.inside=c(0.10,0.90),
-#         legend.box.background = element_blank(),
-#         legend.background = element_blank(),
-#         legend.title=element_text(size=18),
-#         legend.text=element_text(size=16, color="black"))
-# #ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
-# 
-# ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
-# summary(ISO_CALIB)
-# 
-# 
-# 
-# 
-# ### 2.4.4. apply that equation to all other shot woodcocks -------
-# ## deterministic approach without considering uncertainty
+# SUPERSEDED BY NIMBLE MODEL BELOW
+ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
+        panel.grid.minor = element_blank(),
+        axis.text=element_text(size=16, color="black"),
+        axis.title=element_text(size=18),
+        legend.position="inside",
+        legend.position.inside=c(0.10,0.90),
+        legend.box.background = element_blank(),
+        legend.background = element_blank(),
+        legend.title=element_text(size=18),
+        legend.text=element_text(size=16, color="black"))
+#ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
+
+ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
+summary(ISO_CALIB)
+
+
+
+
+### 2.4.4. apply that equation to all other shot woodcocks -------
+## deterministic approach without considering uncertainty
 woco.unk.sf <- UNK_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 woco.unk.vect<-terra::vect(woco.unk.sf)
