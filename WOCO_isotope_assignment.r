@@ -249,7 +249,7 @@ ggplot(EUR) +
 ## then run the script "DOWNLOAD_ISOSCAPE.R"
 
 isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
-  crop(extent(SUI))
+  crop(extent(EUR))
 
 ## downloaded from Nelson et al 2021, but poor resolution
 # isoscape <- raster("data/Piso.AI_v1.2020_0.5deg_1950-2020.nc") %>%
@@ -335,7 +335,7 @@ ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
         legend.background = element_blank(),
         legend.title=element_text(size=18),
         legend.text=element_text(size=16, color="black"))
-#ggsave("output/SUI_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
+#ggsave("output/known_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
 
 ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
 summary(ISO_CALIB)
@@ -745,7 +745,7 @@ saveRDS(woco.iso,"output/woco_iso_origin_model.rds")
 
 ## 3.5. assess model and examine convergence ------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal","b.rain","b.age","int.rain","sigma.calib"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("b.rain","b.age","int.rain","sigma.calib"))) #"int.abd","b.countday","b2.countday","r.abd")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
