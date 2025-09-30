@@ -505,7 +505,7 @@ FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   ggplot(aes(x=ctn, y=for.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  facet_wrap(~prior, ncol = 2) +
+  facet_wrap(~prior, ncol = 1) +
   
   # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
   # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
