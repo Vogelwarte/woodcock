@@ -301,12 +301,11 @@ woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
 woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
 
 
-## 2.4.3. create equation to link rainwater to d2H of feather -------
-# SUPERSEDED BY NIMBLE MODEL BELOW
+## 2.4.3. look at relationship between rainwater to d2H of feather -------
 ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
   geom_point() +
   geom_smooth(method="lm") +
-  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in Swiss woodcock feather") +
+  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in woodcock feather") +
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
         panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
@@ -414,9 +413,9 @@ woco.sf <- woco.sf %>%
 
 table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 
-
-
-
+# 4. clean up and save workspace -------
+rm(isoscape, globcover,forest.mat)
+gc()
 
 save.image("data/woco.input.data.RData")
 
