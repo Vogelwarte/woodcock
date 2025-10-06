@@ -41,8 +41,8 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 # 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
 # prepared in WOCO_isotope_data_preparation.r
-#load("data/woco.input.data.RData")
-load("data/woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
+load("data/woco.input.data.RData")
+#load("data/woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
 try(rm(isoscape, globcover), silent=T)
 # ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
@@ -105,7 +105,7 @@ woco.orig.model<-nimbleCode({
   dispersion ~ dnorm(25,sd=1) # dispersion parameter to convert prior probability into beta distribution - almost fixed quantity
   
   # Standard deviation for isotope ratios in rainwater 
-  sd.unknown[2]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
+  sd.unknown[2]<-max(sigma.calib,sd.rain.d2H)  ### overall distribution across Europe
   sd.unknown[1]<-sigma.calib
   
   
@@ -277,7 +277,7 @@ names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
 #fwrite(out,"output/woco_iso_time_origin_parm_estimates_comb_prior.csv")
-#out<-fread("output/woco_iso_origin_parm_estimates.csv")
+#out<-fread("output/woco_iso_time_origin_parm_estimates_comb_prior.csv")
 
 
 ## for comparing the p.nonlocal estimates for 842 shot birds
@@ -293,7 +293,12 @@ comp<-fread("output/woco_p_nonlocal_comb_prior_SUI_calib.csv") %>%
 hist(comp$diff)
 summary(comp)
 
-#MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))
+
+int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H 
+hist(rnorm(1000,mean=(5.53-31.3*1+1.14*mean.rain.d2H), sd=(13.19)))
+
+
+#MCMCplot(woco.iso$samples, params=c("p.nonlocal"))
 
 
 ## look at the chains and whether they mixed well
