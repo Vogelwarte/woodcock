@@ -41,8 +41,8 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 # 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
 # prepared in WOCO_isotope_data_preparation.r
-load("data/woco.input.data.RData")
-load("woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
+#load("data/woco.input.data.RData")
+load("data/woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
 try(rm(isoscape, globcover), silent=T)
 # ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
@@ -285,7 +285,13 @@ out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal"))) #"int
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 out
-#fwrite(out,"output/woco_p_nonlocal_comb_prior_all_calib.csv")
+#fwrite(out,"output/woco_p_nonlocal_comb_prior_SUI_calib.csv")
+comp<-fread("output/woco_p_nonlocal_comb_prior_SUI_calib.csv") %>%
+  dplyr::select(parameter,median) %>%
+  left_join(out, by="parameter") %>%
+  mutate(diff=median.x-median.y)
+hist(comp$diff)
+summary(comp)
 
 #MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))
 
