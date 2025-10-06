@@ -421,3 +421,12 @@ save.image("data/woco.input.data.RData")
 
 
 
+
+## 3.3. remove non-SUI calibration data and create reduced input data ----
+
+woco.sf <- woco.sf %>%
+  filter(PROVENANCE_voigt=="Suisse")
+dim(woco.sf)
+save.image("data/woco.reduced.input.data.RData")
+
+

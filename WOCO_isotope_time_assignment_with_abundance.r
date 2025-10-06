@@ -40,8 +40,9 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 
 # 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
-# prepared in WOCO_isotope_assignment.r
+# prepared in WOCO_isotope_data_preparation.r
 load("data/woco.input.data.RData")
+load("woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
 try(rm(isoscape, globcover), silent=T)
 # ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
@@ -262,7 +263,7 @@ toc()
 
 
 # saveRDS(woco.iso,"output/woco_iso_time_origin_model_comb_prior.rds") # no point saving - it only runs 10 min and the file is too large for GitHub
-#woco_surv<-readRDS("output/woco_iso_origin_model.rds")
+# woco.iso<-readRDS("output/woco_iso_time_origin_model_comb_prior.rds")
 
 
 
@@ -278,6 +279,13 @@ out
 #fwrite(out,"output/woco_iso_time_origin_parm_estimates_comb_prior.csv")
 #out<-fread("output/woco_iso_origin_parm_estimates.csv")
 
+
+## for comparing the p.nonlocal estimates for 842 shot birds
+out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out$parameter<-row.names(out)
+names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
+out
+#fwrite(out,"output/woco_p_nonlocal_comb_prior_all_calib.csv")
 
 #MCMCplot(woco.iso$samples, params=c("mean.p.nonlocal"))
 
