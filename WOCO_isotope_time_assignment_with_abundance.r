@@ -293,8 +293,6 @@ comp<-fread("output/woco_p_nonlocal_comb_prior_SUI_calib.csv") %>%
 hist(comp$diff)
 summary(comp)
 
-
-int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H 
 hist(rnorm(1000,mean=(5.53-31.3*1+1.14*mean.rain.d2H), sd=(13.19)))
 
 
@@ -376,7 +374,7 @@ woco.orig.model.migprior<-nimbleCode({
   dispersion ~ dnorm(25,sd=1) # dispersion parameter to convert prior probability into beta distribution - almost fixed quantity
   
   # Standard deviation for isotope ratios in rainwater 
-  sd.unknown[2]<-sigma.calib+sd.rain.d2H  ### overall distribution across Europe
+  sd.unknown[2]<-max(sigma.calib,sd.rain.d2H)  ### overall distribution across Europe
   sd.unknown[1]<-sigma.calib
   
   
