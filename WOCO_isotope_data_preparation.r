@@ -49,7 +49,7 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 ### dH: raw isotope measurements in feather keratin (but only available for half of the samples!!) - based on Berlin lab standard
 ### dH_reg: corresponding rainfall hydrogen isotope ratio converted with equation in Powell (2012) (age-specific adjustment)
 ### dH_scaled: is the converted d2H of feather keratin using the formula 0.979*dH + 20.701 to adjust it to Canada lab standard
-### dH_correct: is the corrected d2H of feathers IF a value was in column 'bc' (whatever the fuck this stands for)
+### dH_correct: is the corrected d2H of feathers IF a value was in column 'bc' (whatever this stands for)
 
 
 woco<-fread("data/WOCO_isotopes.csv")
@@ -193,7 +193,7 @@ summary(UNK_WC$dH)
 
 
 
-# 2. ESTIMATING PROPORTION OF LOCAL BIRDS IN HUNTING BAG ---------------------
+# 2. EXTRACTING ISOTOPE DISTRIBUTIONS FROM FOREST MAP OF EUROPE ---------------------
 
 ## 2.1. load shapefile of Switzerland and EUROPE -------
 ## OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
@@ -396,10 +396,10 @@ woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
 
 
 
+# 3. clean up and save workspace -------
 
 
-
-## 3.2. prepare the data needed for NIMBLE input ----
+## 3.1. prepare the data needed for NIMBLE input ----
 woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
@@ -413,7 +413,7 @@ woco.sf <- woco.sf %>%
 
 table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 
-# 4. clean up and save workspace -------
+
 rm(isoscape, globcover,forest.mat)
 gc()
 
@@ -422,7 +422,7 @@ save.image("data/woco.input.data.RData")
 
 
 
-## 3.3. remove non-SUI calibration data and create reduced input data ----
+## 3.2. remove non-SUI calibration data and create reduced input data ----
 
 woco.sf <- woco.sf %>%
   filter(PROVENANCE_voigt=="Suisse")
