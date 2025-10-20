@@ -10,10 +10,25 @@
 # paper: https://esajournals.onlinelibrary.wiley.com/doi/full/10.1890/04-0175
 # isocat package: https://github.com/cjcampbell/isocat
 # assignR  example: https://cran.r-project.org/web/packages/assignR/vignettes/assignR.html
+# isoriX package: https://bookdown.org/content/782/introduction.html [does not download rainfall isotope values]
 
 
 ## received new known origin data from Andrew Hoodless on 28 Sept 2025
 ## included those data for calibration
+
+
+## use annual amount-weighted rainwater isotopes (advice by David Soto because it reflects food web much better)
+
+## update after chat with David Soto on 20 Oct 2025
+### NEED TO DO: re-scale the isotope metrics for all feathers (from IZW and UK) based on Soto 2017 using that equation
+# Correction equation to convert from formerly assigned values for keratins where (a) CBS and KHS or (b) USGS42/43 were
+# used as two‐point calibration reference materials (researchers can estimate uncertainties for slope and intercept using FREML,
+#                                                    when needed)
+# (a) From (7) to (1): Revised δ2
+# H VSMOW = 10.774 + 0.852 * old data
+## https://analyticalsciencejournals.onlinelibrary.wiley.com/doi/full/10.1002/rcm.7893
+## revise isoscape and use full annual amount-weighted mean value rather than growing season average
+
 
 
 rm(list=ls())
@@ -78,6 +93,9 @@ woco %>% dplyr::filter(is.na(dH))
 # ggplot(woco, aes(x=D2,y=dH, col=AGE)) +
 #   geom_point() +
 #   geom_smooth()
+
+
+### APPLY SCALE EQUATION FROM SOTO paper here to bring all UK and German data to same scale
 
 ## USE dH FOR ALL ANALYSES FROM HERE ON!!!
 
