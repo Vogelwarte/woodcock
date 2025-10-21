@@ -618,6 +618,8 @@ summary(UNK_WC$dH)
 
 # 7. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES ----------------------------------
 plot_list <- list()
+WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
+  crop(woco.countries)
 for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 
   ## get canton-wise distribution
@@ -636,7 +638,7 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   ## create plot
   plot_list[[ct]] <- ggplot(EUR) +
     geom_sf() +
-    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h))+
+    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h_MA))+
     geom_sf(data=woco.cnt,color="red") +
     geom_sf(data=EUR, colour="grey12", fill=NA) +
     #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
