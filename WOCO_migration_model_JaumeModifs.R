@@ -655,7 +655,7 @@ FIGURE2<-woco.mig %>%
 FIGURE2
 
 ggsave(plot=FIGURE2,
-       filename="output/woco_cumulative_mig_prop_no_argos.jpg", 
+       filename="output/woco_cumulative_mig_prop_no_argos_jaume.jpg", 
        device="jpg",width=11, height=8)
 
 
