@@ -251,12 +251,12 @@ ggplot(EUR) +
 ## then run the script "DOWNLOAD_ISOSCAPE.R"
 
 ### revised on 21 Oct 2025 to adopt David Soto's suggestion that annual mean is better to characterise food web water
-isoscape <- getIsoscapes(isoType = "GlobalPrecipMA", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
-  projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
+# isoscape <- getIsoscapes(isoType = "GlobalPrecipMA", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
+#   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
 
-isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
   crop(extent(EUR))
-
+plot(isoscape)
 ## downloaded from Nelson et al 2021, but poor resolution
 # isoscape <- raster("data/Piso.AI_v1.2020_0.5deg_1950-2020.nc") %>%
 #   crop(extent(SUI))
@@ -286,7 +286,7 @@ plot(globcover)
 
 
 ### 2.3.2. multiply isoscape with woodcock distribution and generate mean feather distribution
-WOCO.isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
   crop(woco.countries)
 plot(WOCO.isoscape)
 
@@ -298,6 +298,7 @@ origin(WOCO.isoscape)
 ## because the globcover layer has a much finer resolution, we need to resample
 globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
 WOCO.isoscape <- WOCO.isoscape*globcover
+plot(WOCO.isoscape)
 
 ## extract hydrogen isotope values from that distribution
 rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
@@ -319,15 +320,15 @@ woco.vect<-terra::vect(woco.sf)
 
 ## 2.4.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
 
-woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
-woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
+woco.sf$d2h_MA<-terra::extract(isoscape,woco.vect)$d2h_MA
+woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$d2h_se_MA
 
 
 ## 2.4.3. look at relationship between rainwater to d2H of feather -------
-ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
+ggplot(woco.sf, aes(x=d2h_MA,y=dH, col=AGE, fill=AGE)) +
   geom_point() +
   geom_smooth(method="lm") +
-  labs(x="d2H in rainwater (growing season average) at sampling location", y="d2H in woodcock feather") +
+  labs(x="d2H in rainwater (mean annual average) at sampling location", y="d2H in woodcock feather") +
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
         panel.grid.major = element_line(linewidth=0.4, colour="grey89", linetype="dashed"),
@@ -340,9 +341,9 @@ ggplot(woco.sf, aes(x=d2h_GS,y=dH, col=AGE, fill=AGE)) +
         legend.background = element_blank(),
         legend.title=element_text(size=18),
         legend.text=element_text(size=16, color="black"))
-#ggsave("output/known_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
+#ggsave("output/REVISED_known_WOCO_feather_isotope_calibration.jpg", width=9, height=8)
 
-# ISO_CALIB<-lm(dH~d2h_GS+AGE, data=woco.sf)
+# ISO_CALIB<-lm(dH~d2h_MA+AGE, data=woco.sf)
 # summary(ISO_CALIB)
 
 
@@ -354,8 +355,8 @@ woco.unk.sf <- UNK_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 woco.unk.vect<-terra::vect(woco.unk.sf)
 
-woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
-woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+woco.unk.sf$d2h_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_MA
+woco.unk.sf$d2h_se_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_se_MA
 woco.unk.sf %>% filter(is.na(AGE))
 
 
@@ -426,12 +427,12 @@ woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
   #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
-  filter(!is.na(d2h_GS))
+  filter(!is.na(d2h_MA))
 
 woco.sf <- woco.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
-  filter(!is.na(d2h_GS))
+  filter(!is.na(d2h_MA))
 
 table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 
