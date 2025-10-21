@@ -11,6 +11,8 @@
 ## BASE MANUSCRIPT ON PRIOR OPTIONS 3 and 4 - with and without abundance information
 ## this leads to vastly different estimates, and it will be necessary to report that difference
 
+## re-run model on 21 Oct 2025 after revising isotope data preparation
+
 
 rm(list=ls())
 library(data.table)
@@ -162,12 +164,12 @@ woco.orig.model<-nimbleCode({
 woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
-  filter(!is.na(d2h_GS))
+  filter(!is.na(d2h_MA))
 
 woco.sf <- woco.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
-  filter(!is.na(d2h_GS))
+  filter(!is.na(d2h_MA))
 
 table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 
@@ -178,8 +180,8 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       nind.known = dim(woco.sf)[1],
                       mean.rain.d2H = mean.rain.d2H,
                       sd.rain.d2H = sd.rain.d2H,
-                      d2H_rain.known=woco.sf$d2h_GS,
-                      d2H_rain.unknown=woco.unk.sf$d2h_GS,
+                      d2H_rain.known=woco.sf$d2h_MA,
+                      d2H_rain.unknown=woco.unk.sf$d2h_MA,
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
                       p.nonlocal.prior2 = woco.unk.sf$abd_prior,
@@ -202,7 +204,7 @@ parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.no
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
 
-iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_GS-28*ifelse(woco.unk.sf$AGE=="Adulte",0,1),0,1),
+iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_MA-28*ifelse(woco.unk.sf$AGE=="Adulte",0,1),0,1),
                   int.rain = rnorm(1,4.5, sd=5), # informative prior based on Powell
                   b.age = rnorm(1,-28.7, sd=5), # informative prior based on Powell
                   b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
@@ -281,19 +283,19 @@ out
 
 
 ## for comparing the p.nonlocal estimates for 842 shot birds
-out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal"))) #"int.abd","b.countday","b2.countday","r.abd")))
-out$parameter<-row.names(out)
-names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
-out
-#fwrite(out,"output/woco_p_nonlocal_comb_prior_SUI_calib.csv")
-comp<-fread("output/woco_p_nonlocal_comb_prior_SUI_calib.csv") %>%
-  dplyr::select(parameter,median) %>%
-  left_join(out, by="parameter") %>%
-  mutate(diff=median.x-median.y)
-hist(comp$diff)
-summary(comp)
-
-hist(rnorm(1000,mean=(5.53-31.3*1+1.14*mean.rain.d2H), sd=(13.19)))
+# out<- as.data.frame(MCMCsummary(woco.iso$samples, params=c("p.nonlocal"))) #"int.abd","b.countday","b2.countday","r.abd")))
+# out$parameter<-row.names(out)
+# names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
+# out
+# #fwrite(out,"output/woco_p_nonlocal_comb_prior_SUI_calib.csv")
+# comp<-fread("output/woco_p_nonlocal_comb_prior_SUI_calib.csv") %>%
+#   dplyr::select(parameter,median) %>%
+#   left_join(out, by="parameter") %>%
+#   mutate(diff=median.x-median.y)
+# hist(comp$diff)
+# summary(comp)
+# 
+# hist(rnorm(1000,mean=(5.53-31.3*1+1.14*mean.rain.d2H), sd=(13.19)))
 
 
 #MCMCplot(woco.iso$samples, params=c("p.nonlocal"))
@@ -621,9 +623,9 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   ## get canton-wise distribution
   woco.cnt <- woco.unk.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
   cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
-    dplyr::select(ID,KANTON,d2h_GS,d2h_se_GS) %>%
+    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) %>%
     rowwise() %>%
-    mutate(pot.orig.d2H=rnorm(1,d2h_GS,d2h_se_GS)) %>%
+    mutate(pot.orig.d2H=rnorm(1,d2h_MA,d2h_se_MA)) %>%
     ungroup() %>%
     group_by(KANTON) %>%
     summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
