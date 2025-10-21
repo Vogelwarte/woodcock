@@ -548,7 +548,7 @@ FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.90,0.85),
+        legend.position.inside=c(0.90,0.65),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE2
