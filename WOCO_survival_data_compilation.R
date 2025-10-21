@@ -34,8 +34,8 @@ filter<-dplyr::filter
 select<-dplyr::select
 
 ## set root folder for project
-setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
-#setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"), silent=T)
+try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 
 # Load data ---------------------------------------------------------------
 
@@ -417,11 +417,11 @@ tag<-tag[UKbirds]
 dim(y.telemetry)
 
 #### PREPARE A MATRIX OF WEEKS
-nyears<-dim(woco_ch)[2]-1
 nweeks<-dim(y.telemetry)[2]
 nind<-dim(y.telemetry)[1]
 week<-seq(1:nweeks)
 year<-as.numeric(as.factor(separate_wider_delim(woco_ann_ch_obs,cols="id",delim="_", names=c('ring','year'))$year))
+nyears<-max(year)
 effort<-woco.eff.matrix[,-1]
 
 #### create vector of first marking and of last alive record
@@ -438,5 +438,22 @@ l.telemetry<-apply(y.telemetry,1,get.last.telemetry)
 # woco.obs.matrix[77,]
 
 
+
+
+############# CHECK THAT PREPARED DATA HAVE NO NA----------
+dim(y.telemetry)
+length(f.telemetry)
+length(effort)
+length(year)
+length(tag)
+nind
+nweeks
+nyears
+max(year)
+max(tag)
+max(effort)
+
+
 ############# SAVE  PREPARED DATA ----------
 save.image("data/woco_mig_input.RData")
+

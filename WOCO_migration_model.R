@@ -32,8 +32,8 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 
 ## set root folder for project
-setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
-#setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"), silent=T)
+try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 #setwd("C:/woodcock")  ## for HPC
 
 
@@ -416,8 +416,8 @@ smartInit1 <- list(z = z.telemetry,
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 50000
-n.burnin <- 25000
+n.iter <- 5000
+n.burnin <- 2500
 n.chains <- 4
 
 tic()
