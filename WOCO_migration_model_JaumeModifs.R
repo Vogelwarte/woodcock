@@ -42,8 +42,8 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 
 ## set root folder for project
-#setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
-#setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
+try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"), silent=T)
+try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 #setwd("C:/woodcock")  ## for HPC
 
 
@@ -317,11 +317,11 @@ woco.mig.model<-nimbleCode({
 
 #Found errors in f.telemetry
 
-#y.telemetry[77,]
-f.telemetry[77] <- 7
+y.telemetry[61,]
+f.telemetry[61] <- 7
 
-#y.telemetry[166,]
-f.telemetry[166] <- 3
+y.telemetry[146,]
+f.telemetry[146] <- 3
 
 #### BUNDLE DATA INTO A LIST
 
@@ -454,7 +454,7 @@ CmyMCMC <- compileNimble(myMCMC)
 #Run the MCMC
 woco_surv <- runMCMC(CmyMCMC, niter = n.iter, nburnin = n.burnin, thin = 4, nchains = n.chains, setSeed = rcat(4, rep(1/1e6,1e6))) #Random seed
 
-library(MCMCvis)
+
 MCMCsummary(woco_surv)
 
 toc() 
