@@ -87,15 +87,13 @@ ggplot(woco, aes(x=dH_scaled,y=dH, col=AGE)) +
 length(which(is.na(woco$dH_scaled)))
 length(which(is.na(woco$dH)))
 
-## back-convert all measurements to IZW (Berlin) standards
-woco$dH<-(woco$dH_scaled - 20.701)/0.979
+## back-convert all measurements to INTERNATIONAL standards following Soto et al 2017
+# woco$dH<-(woco$dH_scaled - 20.701)/0.979 ## discontinued after discussion with David Soto on 20 Oct 2025
+woco$dH<-10.774 + (0.852*woco$dH_scaled)
 woco %>% dplyr::filter(is.na(dH))
 # ggplot(woco, aes(x=D2,y=dH, col=AGE)) +
 #   geom_point() +
 #   geom_smooth()
-
-
-### APPLY SCALE EQUATION FROM SOTO paper here to bring all UK and German data to same scale
 
 ## USE dH FOR ALL ANALYSES FROM HERE ON!!!
 
@@ -176,11 +174,13 @@ dim(UNK_WC)
 ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
   mutate(ADULTE=ifelse(Age=="Adult",1,0),PROVENANCE_voigt=as.character(LocationCode),
          AGE=ifelse(Age=="Adult", "Adulte","Juvénile")) %>%
+  mutate(dH=10.774 + (0.852*DHF)) %>%   ## new correction from Soto et al 2017 inserted after discussion with David Soto on 20 Oct 2025
   rename(ID=RefID, KANTON=Region,
-         DATE=Date,dH=DHF,LATITUDE=Latitude,LONGITUDE=Longitude) %>%
+         DATE=Date,LATITUDE=Latitude,LONGITUDE=Longitude) %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
   bind_rows(ORIG_WC)
 dim(ORIG_WC)
+
 
 ## 1.5. EXTRACT GROWTH SEASON RAIN ISOTOPES ----
 ## sampled feathers are the first secondary in shot birds and greater coverts in live birds
@@ -249,6 +249,10 @@ ggplot(EUR) +
 #   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
 ## go to "C:/STEFFEN/Vogelwarte/assignR" and open assignR.Rproj
 ## then run the script "DOWNLOAD_ISOSCAPE.R"
+
+### revised on 21 Oct 2025 to adopt David Soto's suggestion that annual mean is better to characterise food web water
+isoscape <- getIsoscapes(isoType = "GlobalPrecipMA", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
+  projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
 
 isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
   crop(extent(EUR))
