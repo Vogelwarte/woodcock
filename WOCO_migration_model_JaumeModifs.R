@@ -12,6 +12,16 @@
 
 ## update on 16 May 2025: adjusted new hunting periods
 
+## update on 21 October 2025: change of likelihood and changes in the distributions of the vague priors. In detail:
+
+#### 1 - Using the state-space likelihood when recovery probabilities are modelled in the observation matrix can result in malfunctioning of MCMC algorithms and biased inference (https://doi.org/10.1002/ece3.71517). I changed the state-space likelihood to a marginalized likelihood to prevent any issues. 
+#### 2 - Modification of prior probability distributions that are then logit-transformed to the beta distribution to prevent any 0, 1, or negative values that would result in infinites or NAs when logit-transforming
+#### 3 - To revise that the model operates properly, I changed the single-command Nimble call to a line-by-line compilation and MCMC iteration command calling. Everything appears to work well with the changes.
+#### 4 - I modified the vector of first encounters f.telemetry in two positions (77 and 166) to match the first encounters in the encounter histories y.telemetry. Please make sure this is fine.
+#### 5 - Modifications elsewhere to make sure the code works with the new format of the MCMC samples with the line-by-line model construction
+
+#### Done (21 October 2025)
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -32,7 +42,7 @@ library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
 
 ## set root folder for project
-setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
+#setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
 #setwd("C:/woodcock")  ## for HPC
 
@@ -305,6 +315,13 @@ woco.mig.model<-nimbleCode({
 # PREPARE NIMBLE RUN WITH DATA INPUT
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#Found errors in f.telemetry
+
+#y.telemetry[77,]
+f.telemetry[77] <- 7
+
+#y.telemetry[166,]
+f.telemetry[166] <- 3
 
 #### BUNDLE DATA INTO A LIST
 
@@ -417,23 +434,33 @@ n.burnin <- 25000
 n.chains <- 4
 
 tic()
-### this takes 4000 sec (2 hrs) for 20000 iterations and converges in that time
-woco_surv <- nimbleMCMC(code = woco.mig.model,
-                        constants=telemetry.constants,
-                        data = telemetry.data,
-                        inits = smartInit1,
-                        dimensions=telemetry.dims,
-                        monitors = parameters.telemetry,
-                        thin=4,
-                        niter = n.iter,
-                        nburnin = n.burnin,
-                        nchains = n.chains,
-                        progressBar = getNimbleOption("MCMCprogressBar"),
-                        summary=T)
+
+#Weird results, the MCMC appears not to iterate. Start command by command and look for errors
+
+mmod <- nimbleModel(woco.mig.model, constants = telemetry.constants, data = telemetry.data, inits = smartInit1, dimensions = telemetry.dims, calculate = TRUE)
+
+#See whether the model compiles well or there's any error
+
+#mmod$initializeInfo()
+#mmod$calculate() #This takes a while but it is necessary to see whether the initial likelihood calculations, given the model and the priors, make sense or result in NAs or infinites, which would make MCMC inference crash or delivered biased results
+#beepr::beep(2) #Alarm when calculate() finishes
+
+#Next steps: compile, build MCMC, etcetera
+cmod <- compileNimble(mmod)
+parameters.telemetry <- c("mean.mig","b.mig.week","mean.phi")
+myMCMC <- buildMCMC(cmod, monitors = parameters.telemetry)
+CmyMCMC <- compileNimble(myMCMC)
+
+#Run the MCMC
+woco_surv <- runMCMC(CmyMCMC, niter = n.iter, nburnin = n.burnin, thin = 4, nchains = n.chains, setSeed = rcat(4, rep(1/1e6,1e6))) #Random seed
+
+library(MCMCvis)
+MCMCsummary(woco_surv)
+
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_nimble_jaume.rds")
 #woco_surv<-readRDS("output/woco_mig_depart_output_nimble.rds")
 
 
@@ -444,12 +471,12 @@ saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
 
 
 #### MODEL ASSESSMENT ####
-out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi")))
+out<- as.data.frame(MCMCsummary(woco_surv, params=c("mean.mig","b.mig.week","mean.phi")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos.csv")
+fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos_jaume.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
@@ -458,12 +485,12 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
   mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52)
 
 
-MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi"))
-ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
+MCMCplot(woco_surv, params=c("mean.mig","b.mig.week","mean.phi"))
+ggsave("output/woco_seasonal_survival_parameter_estimates_jaume.jpg", height=9, width=9)
 # ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates_no_argos.jpg", height=11, width=8)
 
 ## look at the chains and whether they mixed well
-chainsPlot(woco_surv$samples,
+chainsPlot(woco_surv,
            var=c("mean.mig","b.mig.week"
            ))
 
@@ -492,10 +519,10 @@ chainsPlot(woco_surv$samples,
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # ### PREPARE RAW MCMC OUTPUT
-parmcols<-dimnames(woco_surv$samples[[1]])[[2]]
+parmcols<-dimnames(woco_surv[[1]])[[2]]
 
 # ### COMBINE SAMPLES ACROSS CHAINS
-MCMCout<-rbind(woco_surv$samples[[1]],woco_surv$samples[[2]],woco_surv$samples[[3]],woco_surv$samples[[4]])
+MCMCout<-rbind(woco_surv[[1]],woco_surv[[2]],woco_surv[[3]],woco_surv[[4]])
 # str(MCMCout)
 
 ### SET UP ANNUAL TABLE FOR PLOTTING THE ANNUAL SURVIVAL GRAPH
@@ -542,7 +569,7 @@ FIGURE<-MCMCpred %>% rename(raw.mig=mig) %>%
 FIGURE
 
 ggsave(plot=FIGURE,
-       filename="output/woco_seasonal_mig_no_argos.jpg", 
+       filename="output/woco_seasonal_mig_no_argos_jaume.jpg", 
        device="jpg",width=11, height=8)
 
 
@@ -565,7 +592,7 @@ for(s in 1: max(woco.mig$simul)){
   }
 }
 
-saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
+saveRDS(woco.mig,"output/woco_mig_depart_simulation_jaume.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
