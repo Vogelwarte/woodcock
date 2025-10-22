@@ -41,6 +41,8 @@ library(MCMCvis)
 library(nimble)
 library(tictoc)
 library(basicMCMCplots) # for trace plots called chainsPlot
+library(doParallel)
+library(foreach)
 
 ## set root folder for project
 try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"), silent=T)
@@ -458,21 +460,30 @@ MCMCout<-rbind(woco_surv[[1]],woco_surv[[2]],woco_surv[[3]],woco_surv[[4]])
 AnnTab<-data.frame(week = seq(1:nweeks))
 
 ### CALCULATE PREDICTED VALUE FOR EACH SAMPLE
-MCMCpred<-data.frame()
-for(s in 1:nrow(MCMCout)) {
+## UPDATEd 22 Oct 2025 to parallelize code
+
+n_cores <- parallel::detectCores() - 2  # leave one core free
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+MCMCpred <- foreach(s = 1:nrow(MCMCout), .packages = "dplyr", .combine = bind_rows) %dopar% {
+# MCMCpred<-data.frame()
+# for(s in 1:nrow(MCMCout)) {
   
   X<-  AnnTab %>%
     
     ##CALCULATE MONTHLY SURVIVAL
-    mutate(logit.mig=logit(as.numeric(MCMCout[s,match("mean.mig",parmcols)]))+
+    mutate(logit.mig=qlogis(as.numeric(MCMCout[s,match("mean.mig",parmcols)]))+
              as.numeric(MCMCout[s,match("b.mig.week",parmcols)])*week)  %>%
     
     ##BACKTRANSFORM TO NORMAL SCALE
     mutate(mig=plogis(logit.mig)) %>%
     mutate(simul=s)              
-  
-  MCMCpred<-rbind(MCMCpred,as.data.frame(X)) 
-}
+  return(X)
+#   MCMCpred<-rbind(MCMCpred,as.data.frame(X)) 
+  }
+stopCluster(cl)
+
 
 ### CREATE PLOT
 
@@ -505,21 +516,47 @@ ggsave(plot=FIGURE,
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ############ CUMULATIVE FIGURE: PROP POPULATION THAT HAS DEPARTED
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 ## first calculate what proportion of a population of 1000 birds has departed by a given date
-woco.mig<-MCMCpred %>% rename(raw.mig=mig) %>%
-  mutate(pop=1000, left=0, prop_mig=0)
+## UPDATE 22 Oct 2025 to parallelize code
 
-for(s in 1: max(woco.mig$simul)){
-  for(w in 1: nweeks){
-    woco.mig$left[woco.mig$week==w & woco.mig$simul==s]<-rbinom(1,
-                                                                woco.mig$pop[woco.mig$week==w & woco.mig$simul==s],
-                                                                woco.mig$raw.mig[woco.mig$week==w & woco.mig$simul==s])
-    woco.mig$prop_mig[woco.mig$week==w & woco.mig$simul==s]<-sum(woco.mig$left[woco.mig$week<=w & woco.mig$simul==s])/1000
-    woco.mig$pop[woco.mig$week==w+1 & woco.mig$simul==s]<-woco.mig$pop[woco.mig$week==w & woco.mig$simul==s]-
-      woco.mig$left[woco.mig$week==w & woco.mig$simul==s]
+n_cores <- parallel::detectCores() - 2  # leave one core free
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+sims <- unique(MCMCpred$simul)
+nweeks <- max(MCMCpred$week)
+
+woco.mig <- foreach(s = sims, .packages = "dplyr", .combine = bind_rows) %dopar% {
+  df <- MCMCpred %>%
+    rename(raw.mig=mig) %>%
+    dplyr::filter(simul == s) %>%
+    mutate(pop = 1000, left = 0, prop_mig = 0)
+  
+  for (w in 1:nweeks) {
+    df$left[df$week==w]<-rbinom(1, df$pop[df$week==w],df$raw.mig[df$week==w])
+    df$prop_mig[df$week==w]<-sum(df$left[df$week<=w])/1000
+    df$pop[df$week==w+1]<-df$pop[df$week==w]-df$left[df$week==w]
   }
+  
+  return(df)
 }
+stopCluster(cl)
+
+
+
+# woco.mig<-MCMCpred %>% rename(raw.mig=mig) %>%
+#   mutate(pop=1000, left=0, prop_mig=0)
+# 
+# for(s in 1: max(woco.mig$simul)){
+#   for(w in 1: nweeks){
+#     woco.mig$left[woco.mig$week==w & woco.mig$simul==s]<-rbinom(1,
+#                                                                 woco.mig$pop[woco.mig$week==w & woco.mig$simul==s],
+#                                                                 woco.mig$raw.mig[woco.mig$week==w & woco.mig$simul==s])
+#     woco.mig$prop_mig[woco.mig$week==w & woco.mig$simul==s]<-sum(woco.mig$left[woco.mig$week<=w & woco.mig$simul==s])/1000
+#     woco.mig$pop[woco.mig$week==w+1 & woco.mig$simul==s]<-woco.mig$pop[woco.mig$week==w & woco.mig$simul==s]-
+#       woco.mig$left[woco.mig$week==w & woco.mig$simul==s]
+#   }
+# }
 
 saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
