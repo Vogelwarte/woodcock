@@ -20,7 +20,7 @@
 #### 4 - I modified the vector of first encounters f.telemetry in two positions (77 and 166) to match the first encounters in the encounter histories y.telemetry. Please make sure this is fine.
 #### 5 - Modifications elsewhere to make sure the code works with the new format of the MCMC samples with the line-by-line model construction
 
-#### Done (21 October 2025)
+#### revised on 22 October 2025: fixed data prep to remove the faulty f.telemetry values
 
 # Clear workspace ---------------------------------------------------------
 
@@ -124,7 +124,7 @@ length(unique(woco$Ring_num[woco$Beobachtung=="Totfund"]))
 # total number dead outsid
 length(unique(woco$Ring_num[woco$Beobachtung=="Totfund" & woco$Ort=="UG"]))
 
-#Call marginalized likelihood to run the models - cannot pool as there are continuous covariates (effort)
+# Call marginalized likelihood to run the models - cannot pool as there are continuous covariates (effort)
 source("Marginalized_Function_Multistate.R")
 compileNimble(dmslik3)
 compileNimble(rmslik3)
@@ -303,7 +303,12 @@ woco.mig.model<-nimbleCode({
   # Marginalized Likelihood 
   for(i in 1:nind){
     
-    y[i, 1:nweeks] ~ dmslik3(sumf = f[i], nint = nweeks-1, nstates = nstates, FR = 1, ps = ps[1:nstates, 1:nstates, i, 1:(nweeks-1)], po = po[1:nstates, 1:nstates, i, 1:(nweeks-1)])
+    y[i, 1:nweeks] ~ dmslik3(sumf = f[i],
+                             nint = nweeks-1,
+                             nstates = nstates,
+                             FR = 1,  # frequency is 1 because we have individual covariates
+                             ps = ps[1:nstates, 1:nstates, i, 1:(nweeks-1)],  ## state transition matrix
+                             po = po[1:nstates, 1:nstates, i, 1:(nweeks-1)])  ## observation state matrix
     
   }
 }) ## end of nimble code chunk
@@ -315,13 +320,13 @@ woco.mig.model<-nimbleCode({
 # PREPARE NIMBLE RUN WITH DATA INPUT
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#Found errors in f.telemetry
-
-y.telemetry[61,]
-f.telemetry[61] <- 7
-
-y.telemetry[146,]
-f.telemetry[146] <- 3
+# #Found errors in f.telemetry
+# 
+# y.telemetry[61,]
+# f.telemetry[61] <- 7
+# 
+# y.telemetry[146,]
+# f.telemetry[146] <- 3
 
 #### BUNDLE DATA INTO A LIST
 
