@@ -12,6 +12,16 @@
 
 ## update on 16 May 2025: adjusted new hunting periods
 
+## update on 21 October 2025: change of likelihood and changes in the distributions of the vague priors. In detail:
+
+#### 1 - Using the state-space likelihood when recovery probabilities are modelled in the observation matrix can result in malfunctioning of MCMC algorithms and biased inference (https://doi.org/10.1002/ece3.71517). I changed the state-space likelihood to a marginalized likelihood to prevent any issues. 
+#### 2 - Modification of prior probability distributions that are then logit-transformed to the beta distribution to prevent any 0, 1, or negative values that would result in infinites or NAs when logit-transforming
+#### 3 - To revise that the model operates properly, I changed the single-command Nimble call to a line-by-line compilation and MCMC iteration command calling. Everything appears to work well with the changes.
+#### 4 - I modified the vector of first encounters f.telemetry in two positions (77 and 166) to match the first encounters in the encounter histories y.telemetry. Please make sure this is fine.
+#### 5 - Modifications elsewhere to make sure the code works with the new format of the MCMC samples with the line-by-line model construction
+
+#### revised on 22 October 2025: fixed data prep to remove the faulty f.telemetry values
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -114,9 +124,10 @@ length(unique(woco$Ring_num[woco$Beobachtung=="Totfund"]))
 # total number dead outsid
 length(unique(woco$Ring_num[woco$Beobachtung=="Totfund" & woco$Ort=="UG"]))
 
-
-
-
+# Call marginalized likelihood to run the models - cannot pool as there are continuous covariates (effort)
+source("Marginalized_Function_Multistate.R")
+compileNimble(dmslik3)
+compileNimble(rmslik3)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # SETTING UP NIMBLE CODE FOR SURVIVAL MODEL ---------------
@@ -187,14 +198,14 @@ woco.mig.model<-nimbleCode({
   }
   
   #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
-  mean.mig ~ dnorm(0,1)   # fairly uninformative prior for intercept of weekly departure probability
+  mean.mig ~ dbeta(1,1)   # fairly uninformative prior for intercept of weekly departure probability
   lm.mean <- log(mean.mig/(1 - mean.mig))    # logit transformed migration intercept
   
   #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
-  mean.p.in ~ dunif(0,1)   # fairly uninformative prior for weekly detection probabilities
+  mean.p.in ~ dbeta(1,1)   # fairly uninformative prior for weekly detection probabilities
   lpin.mean <- log(mean.p.in/(1 - mean.p.in))    # logit transformed detection intercept
   
-  mean.p.out ~ dunif(0,0.3)   # fairly uninformative prior for weekly detection probabilities
+  mean.p.out ~ dunif(0.000001,0.3)   # fairly uninformative prior for weekly detection probabilities
   lpout.mean <- log(mean.p.out/(1 - mean.p.out))    # logit transformed detection intercept
   
   #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
@@ -220,87 +231,86 @@ woco.mig.model<-nimbleCode({
       
       # Define probabilities of state S(t+1) [last dim] given S(t) [first dim]
       
-      ps[1,i,t,1]<-phi[i,t]*(1-mig[i,t])
-      ps[1,i,t,2]<-(1-phi[i,t])*(1-mig[i,t])
-      ps[1,i,t,3]<-phi[i,t]*mig[i,t]
-      ps[1,i,t,4]<-(1-phi[i,t])*mig[i,t]
-      ps[1,i,t,5] <- 0
+      ps[1,1,i,t]<-phi[i,t]*(1-mig[i,t])
+      ps[1,2,i,t]<-(1-phi[i,t])*(1-mig[i,t])
+      ps[1,3,i,t]<-phi[i,t]*mig[i,t]
+      ps[1,4,i,t]<-(1-phi[i,t])*mig[i,t]
+      ps[1,5,i,t] <- 0
       
-      ps[2,i,t,1]<-0
-      ps[2,i,t,2]<-0
-      ps[2,i,t,3]<-0
-      ps[2,i,t,4]<-0
-      ps[2,i,t,5]<-1
+      ps[2,1,i,t]<-0
+      ps[2,2,i,t]<-0
+      ps[2,3,i,t]<-0
+      ps[2,4,i,t]<-0
+      ps[2,5,i,t]<-1
       
-      ps[3,i,t,1]<-0
-      ps[3,i,t,2]<-0
-      ps[3,i,t,3]<-phi[i,t]
-      ps[3,i,t,4]<-(1-phi[i,t])
-      ps[3,i,t,5] <- 0
+      ps[3,1,i,t]<-0
+      ps[3,2,i,t]<-0
+      ps[3,3,i,t]<-phi[i,t]
+      ps[3,4,i,t]<-(1-phi[i,t])
+      ps[3,5,i,t] <- 0
       
-      ps[4,i,t,1]<-0
-      ps[4,i,t,2]<-0
-      ps[4,i,t,3]<-0
-      ps[4,i,t,4]<-0
-      ps[4,i,t,5] <- 1
+      ps[4,1,i,t]<-0
+      ps[4,2,i,t]<-0
+      ps[4,3,i,t]<-0
+      ps[4,4,i,t]<-0
+      ps[4,5,i,t] <- 1
       
       #Add an absorbing state, otherwise the recovery probability is applied all over and over I think
       
-      ps[5,i,t,1] <- 0
-      ps[5,i,t,2] <- 0
-      ps[5,i,t,3] <- 0
-      ps[5,i,t,4] <- 0
-      ps[5,i,t,5] <- 1 #Probability (dead to remain dead)
+      ps[5,1,i,t] <- 0
+      ps[5,2,i,t] <- 0
+      ps[5,3,i,t] <- 0
+      ps[5,4,i,t] <- 0
+      ps[5,5,i,t] <- 1 #Probability (dead to remain dead)
       
       # Define probabilities of O(t) [last dim] given S(t)  [first dim]
       
-      po[1,i,t,1]<-p.obs.in[i,t]
-      po[1,i,t,2]<-0
-      po[1,i,t,3]<-0
-      po[1,i,t,4]<-0
-      po[1,i,t,5]<-(1-p.obs.in[i,t])
+      po[1,1,i,t]<-p.obs.in[i,t]
+      po[1,2,i,t]<-0
+      po[1,3,i,t]<-0
+      po[1,4,i,t]<-0
+      po[1,5,i,t]<-(1-p.obs.in[i,t])
       
-      po[2,i,t,1]<-0
-      po[2,i,t,2]<-0
-      po[2,i,t,3]<-p.dead.in[i,t]
-      po[2,i,t,4]<-0
-      po[2,i,t,5]<-(1-p.dead.in[i,t])
+      po[2,1,i,t]<-0
+      po[2,2,i,t]<-0
+      po[2,3,i,t]<-p.dead.in[i,t]
+      po[2,4,i,t]<-0
+      po[2,5,i,t]<-(1-p.dead.in[i,t])
       
-      po[3,i,t,1]<-0
-      po[3,i,t,2]<-p.obs.out[i,t]
-      po[3,i,t,3]<-0
-      po[3,i,t,4]<-0
-      po[3,i,t,5]<-(1-p.obs.out[i,t])
+      po[3,1,i,t]<-0
+      po[3,2,i,t]<-p.obs.out[i,t]
+      po[3,3,i,t]<-0
+      po[3,4,i,t]<-0
+      po[3,5,i,t]<-(1-p.obs.out[i,t])
       
-      po[4,i,t,1]<-0
-      po[4,i,t,2]<-0
-      po[4,i,t,3]<-0
-      po[4,i,t,4]<-p.dead.out[i,t]
-      po[4,i,t,5]<-(1-p.dead.out[i,t])
+      po[4,1,i,t]<-0
+      po[4,2,i,t]<-0
+      po[4,3,i,t]<-0
+      po[4,4,i,t]<-p.dead.out[i,t]
+      po[4,5,i,t]<-(1-p.dead.out[i,t])
       
       #Add match event - absorbing state: long-dead individuals will always be unobservable with prob. 1
       
-      po[5,i,t,1] <- 0
-      po[5,i,t,2] <- 0
-      po[5,i,t,3] <- 0
-      po[5,i,t,4] <- 0
-      po[5,i,t,5] <- 1
+      po[5,1,i,t] <- 0
+      po[5,2,i,t] <- 0
+      po[5,3,i,t] <- 0
+      po[5,4,i,t] <- 0
+      po[5,5,i,t] <- 1
       
     } #t
   } #i
   
-  # Likelihood 
-  for (i in 1:nind){
-    # Define latent state at first capture
-    z[i,f[i]] <- 1 ## alive in study area on first record - all other individuals and observations should have been eliminated because they are not relevant to the model
-    for (t in (f[i]+1):nweeks){
-      # State process: draw S(t) given S(t-1)
-      z[i,t] ~ dcat(ps[z[i,t-1], i, t-1,1:5])     ### check different CJS distribution in nimbleEcology dcjs
-      # Observation process: draw O(t) given S(t)
-      y[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])
-      #rep.states[i,t] ~ dcat(po[z[i,t], i, t-1,1:5])    ## include this as goodness of fit measure
-    } #t
-  } #i
+  # Marginalized Likelihood 
+  for(i in 1:nind){
+    
+    y[i, 1:nweeks] ~ dmslik3(sumf = f[i],
+                             nint = nweeks-1,
+                             nstates = nstates,
+                             FR = 1,  # frequency is 1 because we have individual covariates
+                             ps = ps[1:nstates, 1:nstates, i, 1:(nweeks-1)],  ## state transition matrix
+                             po = po[1:nstates, 1:nstates, i, 1:(nweeks-1)])  ## observation state matrix
+    
+  }
 }) ## end of nimble code chunk
 
 
@@ -310,6 +320,13 @@ woco.mig.model<-nimbleCode({
 # PREPARE NIMBLE RUN WITH DATA INPUT
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+# #Found errors in f.telemetry
+# 
+# y.telemetry[61,]
+# f.telemetry[61] <- 7
+# 
+# y.telemetry[146,]
+# f.telemetry[146] <- 3
 
 #### BUNDLE DATA INTO A LIST
 
@@ -323,13 +340,15 @@ telemetry.constants <- list(f = f.telemetry,
                             tag = tag,
                             nind = nind,
                             nweeks=nweeks,
-                            nyears = nyears)
+                            nyears = nyears,
+                            nstates = max(y.telemetry))
+
 telemetry.data <- list(y = y.telemetry)
 
 
 ### SPECIFY DIMENSIONS for arrays used with empty indices
-telemetry.dims <- list(ps = c(5, dim(y.telemetry)[1], dim(y.telemetry)[2], 5),
-                       po = c(5, dim(y.telemetry)[1], dim(y.telemetry)[2], 5))
+telemetry.dims <- list(ps = c(5, 5, dim(y.telemetry)[1], dim(y.telemetry)[2]),
+                       po = c(5, 5, dim(y.telemetry)[1], dim(y.telemetry)[2]))
 
 
 
@@ -345,10 +364,9 @@ parameters.telemetry <- c("mean.mig","b.mig.week","mean.phi")
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
 
 # Missing values (NAs) or non-finite values were found in model variables: phi, b.phi.age, b.phi.mig, b.phi.feed, b.phi.sex, b.phi.FRA, b.phi.SUI, b.phi.ESP, p.obs, tag.fail, p.found.dead, ps, po, z, y, rep.states.
-smartInit1 <- list(z = z.telemetry,
-                  # z = ifelse(is.na(z.telemetry),1,z.telemetry),
-                  # y = ifelse(is.na(y.telemetry),1,y.telemetry),
-                  #  y = y.telemetry,
+smartInit1 <- list(# z = ifelse(is.na(z.telemetry),1,z.telemetry),
+                   # y = ifelse(is.na(y.telemetry),1,y.telemetry),
+                   #  y = y.telemetry,
                    
                    mean.phi = runif(nyears,0.95,0.999),
                    mean.p.dead.in = runif(nyears,0.2,0.9),
@@ -360,7 +378,7 @@ smartInit1 <- list(z = z.telemetry,
                    
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
                    mean.mig = 0.1,   # fairly uninformative prior for weekly migration probabilities
-
+                   
                    #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
                    mean.p.in = 0.2,   # fairly uninformative prior for weekly detection probabilities
                    mean.p.out = 0.05,   # fairly uninformative prior for weekly detection probabilities
@@ -416,28 +434,38 @@ smartInit1 <- list(z = z.telemetry,
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
-n.iter <- 5000
-n.burnin <- 2500
+n.iter <- 50000
+n.burnin <- 25000
 n.chains <- 4
 
 tic()
-### this takes 4000 sec (2 hrs) for 20000 iterations and converges in that time
-woco_surv <- nimbleMCMC(code = woco.mig.model,
-                        constants=telemetry.constants,
-                        data = telemetry.data,
-                        inits = smartInit1,
-                        dimensions=telemetry.dims,
-                        monitors = parameters.telemetry,
-                        thin=4,
-                        niter = n.iter,
-                        nburnin = n.burnin,
-                        nchains = n.chains,
-                        progressBar = getNimbleOption("MCMCprogressBar"),
-                        summary=T)
+
+#Weird results, the MCMC appears not to iterate. Start command by command and look for errors
+
+mmod <- nimbleModel(woco.mig.model, constants = telemetry.constants, data = telemetry.data, inits = smartInit1, dimensions = telemetry.dims, calculate = TRUE)
+
+#See whether the model compiles well or there's any error
+
+#mmod$initializeInfo()
+#mmod$calculate() #This takes a while but it is necessary to see whether the initial likelihood calculations, given the model and the priors, make sense or result in NAs or infinites, which would make MCMC inference crash or delivered biased results
+#beepr::beep(2) #Alarm when calculate() finishes
+
+#Next steps: compile, build MCMC, etcetera
+cmod <- compileNimble(mmod)
+parameters.telemetry <- c("mean.mig","b.mig.week","mean.phi")
+myMCMC <- buildMCMC(cmod, monitors = parameters.telemetry)
+CmyMCMC <- compileNimble(myMCMC)
+
+#Run the MCMC
+woco_surv <- runMCMC(CmyMCMC, niter = n.iter, nburnin = n.burnin, thin = 4, nchains = n.chains, setSeed = rcat(4, rep(1/1e6,1e6))) #Random seed
+
+
+MCMCsummary(woco_surv)
+
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_nimble_jaume.rds")
 #woco_surv<-readRDS("output/woco_mig_depart_output_nimble.rds")
 
 
@@ -448,12 +476,12 @@ saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
 
 
 #### MODEL ASSESSMENT ####
-out<- as.data.frame(MCMCsummary(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi")))
+out<- as.data.frame(MCMCsummary(woco_surv, params=c("mean.mig","b.mig.week","mean.phi")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos.csv")
+fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos_jaume.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
@@ -462,12 +490,12 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
   mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52)
 
 
-MCMCplot(woco_surv$samples, params=c("mean.mig","b.mig.week","mean.phi"))
-ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
+MCMCplot(woco_surv, params=c("mean.mig","b.mig.week","mean.phi"))
+ggsave("output/woco_seasonal_survival_parameter_estimates_jaume.jpg", height=9, width=9)
 # ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates_no_argos.jpg", height=11, width=8)
 
 ## look at the chains and whether they mixed well
-chainsPlot(woco_surv$samples,
+chainsPlot(woco_surv,
            var=c("mean.mig","b.mig.week"
            ))
 
@@ -496,10 +524,10 @@ chainsPlot(woco_surv$samples,
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # ### PREPARE RAW MCMC OUTPUT
-parmcols<-dimnames(woco_surv$samples[[1]])[[2]]
+parmcols<-dimnames(woco_surv[[1]])[[2]]
 
 # ### COMBINE SAMPLES ACROSS CHAINS
-MCMCout<-rbind(woco_surv$samples[[1]],woco_surv$samples[[2]],woco_surv$samples[[3]],woco_surv$samples[[4]])
+MCMCout<-rbind(woco_surv[[1]],woco_surv[[2]],woco_surv[[3]],woco_surv[[4]])
 # str(MCMCout)
 
 ### SET UP ANNUAL TABLE FOR PLOTTING THE ANNUAL SURVIVAL GRAPH
@@ -546,7 +574,7 @@ FIGURE<-MCMCpred %>% rename(raw.mig=mig) %>%
 FIGURE
 
 ggsave(plot=FIGURE,
-       filename="output/woco_seasonal_mig_no_argos.jpg", 
+       filename="output/woco_seasonal_mig_no_argos_jaume.jpg", 
        device="jpg",width=11, height=8)
 
 
@@ -565,11 +593,11 @@ for(s in 1: max(woco.mig$simul)){
                                                                 woco.mig$raw.mig[woco.mig$week==w & woco.mig$simul==s])
     woco.mig$prop_mig[woco.mig$week==w & woco.mig$simul==s]<-sum(woco.mig$left[woco.mig$week<=w & woco.mig$simul==s])/1000
     woco.mig$pop[woco.mig$week==w+1 & woco.mig$simul==s]<-woco.mig$pop[woco.mig$week==w & woco.mig$simul==s]-
-                                                                woco.mig$left[woco.mig$week==w & woco.mig$simul==s]
+      woco.mig$left[woco.mig$week==w & woco.mig$simul==s]
   }
 }
 
-saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
+saveRDS(woco.mig,"output/woco_mig_depart_simulation_jaume.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
@@ -632,7 +660,7 @@ FIGURE2<-woco.mig %>%
 FIGURE2
 
 ggsave(plot=FIGURE2,
-       filename="output/woco_cumulative_mig_prop_no_argos.jpg", 
+       filename="output/woco_cumulative_mig_prop_no_argos_jaume.jpg", 
        device="jpg",width=11, height=8)
 
 
