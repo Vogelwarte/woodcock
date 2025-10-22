@@ -28,6 +28,7 @@ rm(list=ls())
 Sys.setenv(LANG = "en") ##change language of error messages to english
 # install.packages(c('tictoc','coda','MCMCvis','basicMCMCplots','lubridate','tidyverse','dplyr','data.table','png','magick','jpeg','grid','gtable','igraph', 'coda', 'R6', 'pracma', 'numDeriv'), dependencies=T)
 # install.packages('nimble', dependencies=T)
+
 # Load libraries, functions etc -------------------------------------------
 library(lubridate)
 library(tidyverse)
@@ -54,14 +55,20 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 # Sys.setenv(PATH = newPath) 
 
 
-# Load data ---------------------------------------------------------------
+# Load data and likelihood function ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
 load("data/woco_mig_input.RData")  ## option to remove _no_argos for full dataset
 nimbleOptions(allowDynamicIndexing = TRUE)
 
 
+# Call marginalized likelihood to run the models - cannot pool as there are continuous covariates (effort)
+source("Marginalized_Function_Multistate.R")
+compileNimble(dmslik3)
+compileNimble(rmslik3)
 
-## ADJUST INPUT DATA (provided by Jaume Badia Boher)
+
+
+## ADJUST INPUT DATA (provided by Jaume Badia Boher) ----------
 
 # remove NAs in the encounter histories to remove the number of NAs when assembling the model with nimbleModel, and will make error tracing easier.
 
@@ -109,7 +116,7 @@ for(i in 1:nrow(ww4)){
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-############ REPORTING RAW DATA FOR MANUSCRIPT
+############ REPORTING RAW DATA FOR MANUSCRIPT ------------------
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # total number of marked birds
@@ -124,10 +131,7 @@ length(unique(woco$Ring_num[woco$Beobachtung=="Totfund"]))
 # total number dead outsid
 length(unique(woco$Ring_num[woco$Beobachtung=="Totfund" & woco$Ort=="UG"]))
 
-# Call marginalized likelihood to run the models - cannot pool as there are continuous covariates (effort)
-source("Marginalized_Function_Multistate.R")
-compileNimble(dmslik3)
-compileNimble(rmslik3)
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # SETTING UP NIMBLE CODE FOR SURVIVAL MODEL ---------------
@@ -136,7 +140,6 @@ compileNimble(rmslik3)
 # Specify model in NIMBLE format
 woco.mig.model<-nimbleCode({
   
-  # -------------------------------------------------
   # Parameters:
   # phi: weekly survival probability intercept
   # mig: weekly migration probability
@@ -144,7 +147,6 @@ woco.mig.model<-nimbleCode({
   # p.obs: probability to be observed alive even through capture or transmitter
   # p.found.dead: probability for carcass to be recovered
   
-  # -------------------------------------------------
   # True States (S) - these are often unknown and cannot be observed
   # 1 alive in study area
   # 2 dead in study area
@@ -158,8 +160,6 @@ woco.mig.model<-nimbleCode({
   # 3 Dead bird recovered  in study area
   # 4 Dead bird recovered  outside study area
   # 5 No signal (=not observed)
-  
-  # -------------------------------------------------
   
   # Priors and constraints
   
@@ -189,38 +189,31 @@ woco.mig.model<-nimbleCode({
   
   #### BASELINE FOR SURVIVAL PROBABILITY (varies by year)
   for(s in 1:nyears) {
-    mean.phi[s] ~ dunif(0.9,1)   # fairly uninformative prior for weekly survival probabilities
+    mean.phi[s] ~ dbeta(35,1)   # mildly informative prior for weekly survival probabilities, which should be close to 1
     #lp.mean[s] <- log(mean.phi[s]/(1 - mean.phi[s]))    # logit transformed survival intercept
     
     #### DEAD RECOVERY PROBABILITY VARIES BY YEAR
-    mean.p.dead.in[s] ~ dunif(0,1)
-    mean.p.dead.out[s] ~ dunif(0,0.3)
+    mean.p.dead.in[s] ~ dbeta(1,1)   # fairly uninformative prior for weekly recovery probabilities
+    mean.p.dead.out[s] ~ dbeta(1,15)   # slightly informative prior for weekly recovery probabilities outside of study area (definitely <0.5)
   }
   
   #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
-  mean.mig ~ dbeta(1,1)   # fairly uninformative prior for intercept of weekly departure probability
+  mean.mig ~ dbeta(1,50)   # fairly informative prior for intercept of weekly departure probability - this should be close to 0 because at week 0 all birds are in study area
   lm.mean <- log(mean.mig/(1 - mean.mig))    # logit transformed migration intercept
   
   #### BASELINE FOR OBSERVATION PROBABILITY (varies by year)
   mean.p.in ~ dbeta(1,1)   # fairly uninformative prior for weekly detection probabilities
   lpin.mean <- log(mean.p.in/(1 - mean.p.in))    # logit transformed detection intercept
   
-  mean.p.out ~ dunif(0.000001,0.3)   # fairly uninformative prior for weekly detection probabilities
+  mean.p.out ~ dbeta(1,15)   # slightly informative prior for weekly detection probabilities outside of study area (definitely <0.5)
   lpout.mean <- log(mean.p.out/(1 - mean.p.out))    # logit transformed detection intercept
   
   #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
-  b.mig.week ~ dnorm(1,sd=2)         # Prior for week effect on migration probability on logit scale - must be positive
-  b.obs.effort ~ dnorm(1, sd=2)         # Prior for effort effect on observation probability on logit scale  - must be positive
-  b.obs.tag ~ dnorm(1, sd=2)         # Prior for tag effect on observation probability on logit scale  - must be positive 
+  b.mig.week ~ dnorm(1,sd=2)        # Prior for week effect on migration probability on logit scale - must be positive
+  b.obs.effort ~ dnorm(1, sd=2)     # Prior for effort effect on observation probability on logit scale  - must be positive
+  b.obs.tag ~ dnorm(1, sd=2)        # Prior for tag effect on observation probability on logit scale  - must be positive 
   
-  # #### DEAD RECOVERY PROBABILITY VARIES BY INDIVIDUAL
-  # for (i in 1:nind){
-  #   p.found.dead.in[i] ~ dunif(0,1)
-  #   p.found.dead.out[i] ~ dunif(0,0.3)
-  # } #i
-  
-  
-  
+
   # -------------------------------------------------
   # Define state-transition and observation matrices 
   # -------------------------------------------------
@@ -320,14 +313,6 @@ woco.mig.model<-nimbleCode({
 # PREPARE NIMBLE RUN WITH DATA INPUT
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# #Found errors in f.telemetry
-# 
-# y.telemetry[61,]
-# f.telemetry[61] <- 7
-# 
-# y.telemetry[146,]
-# f.telemetry[146] <- 3
-
 #### BUNDLE DATA INTO A LIST
 
 #### DISTINGUISH CONSTANTS AND DATA----
@@ -372,10 +357,6 @@ smartInit1 <- list(# z = ifelse(is.na(z.telemetry),1,z.telemetry),
                    mean.p.dead.in = runif(nyears,0.2,0.9),
                    mean.p.dead.out = runif(nyears,0,0.3),
                    
-                   # phi = array(runif(nweeks*nind,0.95,0.999),dim=c(nind,nweeks)),
-                   # p.dead.in = array(runif(nweeks*nind,0.2,0.9),dim=c(nind,nweeks)),
-                   # p.dead.out = array(runif(nweeks*nind,0,0.3),dim=c(nind,nweeks)),
-                   
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
                    mean.mig = 0.1,   # fairly uninformative prior for weekly migration probabilities
                    
@@ -391,46 +372,8 @@ smartInit1 <- list(# z = ifelse(is.na(z.telemetry),1,z.telemetry),
 )
 
 
-
-# # MCMC settings
-# # number of posterior samples per chain is n.iter - n.burnin
-# n.iter <- 200
-# n.burnin <- 100
-# n.chains <- 4
-# 
-# 
-# # PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
-# test <- nimbleModel(code = woco.mig.model,
-#                     constants=telemetry.constants,
-#                     data = telemetry.data,
-#                     inits = smartInit1,
-#                     calculate=TRUE)
-# 
-# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-# test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
-# test$initializeInfo()
-# #help(modelInitialization)
-# 
-# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-# configureMCMC(test) # check that the samplers used are ok - all RW samplers need proper inits
-# 
-# 
-# # use test output as starting values or check where the NA comes from
-# test$logProb_b.mig.week
-# test$logProb_mean.phi
-# test$b.obs.effort
-# test$mean.phi
-# test$phi[1:3,]
-# y.telemetry[1:3,15:16]
-# z.telemetry[1:3,15:16]
-# test$logProb_y ### there should not be any -Inf in this matrix
-# y.telemetry[17,15:18]
-# z.telemetry[17,]
-
-
-
 ### FIT FULL MODEL TO ALL DATA ############################
-# RUN NIMBLE MODEL --------------------
+# RUN NIMBLE MODEL IN STEPWISE FASHION --------------------
 
 # MCMC settings
 # number of posterior samples per chain is n.iter - n.burnin
@@ -440,23 +383,23 @@ n.chains <- 4
 
 tic()
 
-#Weird results, the MCMC appears not to iterate. Start command by command and look for errors
+# Weird results, the MCMC appears not to iterate. Start command by command and look for errors
 
 mmod <- nimbleModel(woco.mig.model, constants = telemetry.constants, data = telemetry.data, inits = smartInit1, dimensions = telemetry.dims, calculate = TRUE)
 
-#See whether the model compiles well or there's any error
+# See whether the model compiles well or there's any error
 
-#mmod$initializeInfo()
-#mmod$calculate() #This takes a while but it is necessary to see whether the initial likelihood calculations, given the model and the priors, make sense or result in NAs or infinites, which would make MCMC inference crash or delivered biased results
-#beepr::beep(2) #Alarm when calculate() finishes
+# mmod$initializeInfo()
+# mmod$calculate() #This takes a while but it is necessary to see whether the initial likelihood calculations, given the model and the priors, make sense or result in NAs or infinites, which would make MCMC inference crash or delivered biased results
+# beepr::beep(2) #Alarm when calculate() finishes
 
-#Next steps: compile, build MCMC, etcetera
+# Next steps: compile, build MCMC, etcetera
 cmod <- compileNimble(mmod)
 parameters.telemetry <- c("mean.mig","b.mig.week","mean.phi")
 myMCMC <- buildMCMC(cmod, monitors = parameters.telemetry)
 CmyMCMC <- compileNimble(myMCMC)
 
-#Run the MCMC
+# Run the MCMC
 woco_surv <- runMCMC(CmyMCMC, niter = n.iter, nburnin = n.burnin, thin = 4, nchains = n.chains, setSeed = rcat(4, rep(1/1e6,1e6))) #Random seed
 
 
@@ -465,7 +408,7 @@ MCMCsummary(woco_surv)
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_mig_depart_output_nimble_jaume.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
 #woco_surv<-readRDS("output/woco_mig_depart_output_nimble.rds")
 
 
