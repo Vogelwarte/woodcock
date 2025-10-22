@@ -424,7 +424,7 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_telemetry_seasonal_surv_parm_no_argos_jaume.csv")
+fwrite(out,"output/woco_telemetry_seasonal_surv_parm.csv")
 #out<-fread("output/woco_telemetry_surv_parm_v1.csv")
 
 
@@ -434,32 +434,13 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
 
 
 MCMCplot(woco_surv, params=c("mean.mig","b.mig.week","mean.phi"))
-ggsave("output/woco_seasonal_survival_parameter_estimates_jaume.jpg", height=9, width=9)
+ggsave("output/woco_seasonal_survival_parameter_estimates.jpg", height=9, width=9)
 # ggsave("C:/STEFFEN/OneDrive - Vogelwarte/General/ANALYSES/wocopopmod/output/Fig_S1_parameter_estimates_no_argos.jpg", height=11, width=8)
 
 ## look at the chains and whether they mixed well
 chainsPlot(woco_surv,
            var=c("mean.mig","b.mig.week"
            ))
-
-
-
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-############ MADE UP GOF TEST  #############################------------
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-### suggested by Pius Korner in July 2023
-### simulate data from model
-### compare frequency of states from simulated prediction to frequency in observed data
-### run once, then commented out as rep.states slowed down convergence
-
-# OBS<-table(as.factor(y.telemetry))
-# REPraw<-MCMCpstr(woco_surv$samples, params=c("rep.states"), type="chains")
-# REP<-table(as.factor(as.numeric(REPraw$rep.states[REPraw$rep.states>0])))  ## remove the 0s because they are NA in the y.telemetry matrix from occ before an animal was tagged
-# chisq.test(OBS,REP)  ### should have a p-value >> 0.05 otherwise there would be disconcerting lack of fit
-
-
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -517,7 +498,7 @@ FIGURE<-MCMCpred %>% rename(raw.mig=mig) %>%
 FIGURE
 
 ggsave(plot=FIGURE,
-       filename="output/woco_seasonal_mig_no_argos_jaume.jpg", 
+       filename="output/woco_seasonal_mig_prob.jpg", 
        device="jpg",width=11, height=8)
 
 
@@ -540,7 +521,7 @@ for(s in 1: max(woco.mig$simul)){
   }
 }
 
-saveRDS(woco.mig,"output/woco_mig_depart_simulation_jaume.rds")
+saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
 #woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
@@ -565,24 +546,14 @@ FIGURE2<-woco.mig %>%
   geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
   geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
   
-  # ### add vertical lines to specify key dates OF NEW (2024) HUNTING TIMES
-  # geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
-  # geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
-  # geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
-  # geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey18", linewidth=2) +
+  ### add vertical lines to specify key dates OF OLD HUNTING TIMES - REMOVED LABELS AS THEY ARE TOO CONFUSING
+  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
+  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
   # geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
   # geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
   # geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
-  
-  
-  ### add vertical lines to specify key dates OF OLD HUNTING TIMES
-  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
-  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
-  geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
-  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey18", linewidth=2) +
-  geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
-  geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
-  geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
   
   
   ### add the bird icons
@@ -603,7 +574,7 @@ FIGURE2<-woco.mig %>%
 FIGURE2
 
 ggsave(plot=FIGURE2,
-       filename="output/woco_cumulative_mig_prop_no_argos_jaume.jpg", 
+       filename="output/woco_cumulative_mig_prop.jpg", 
        device="jpg",width=11, height=8)
 
 
