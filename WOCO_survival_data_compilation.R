@@ -19,6 +19,8 @@
 
 ## UPDATED 12 FEB 2025 to exclude ARGOS DATA (optional - because we are not sure about permissions)
 
+## UPDATED 22 OCT 2025 to set obs to NA prior to first observation (even in subsequent years) to avoid model failure
+
 
 # Clear workspace ---------------------------------------------------------
 
@@ -325,6 +327,7 @@ for(i in 1:nrow(woco.obs.matrix)){
   ### extract start and end dates for selected bird
   daterange<-woco %>%
     filter(Ring_num==rn) %>%
+    #filter(year(Datum)==yr) %>%
     filter(Beobachtung!="Senderfund") %>%
     filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
     summarise(first=min(Datum),last=max(Datum))
@@ -332,7 +335,7 @@ for(i in 1:nrow(woco.obs.matrix)){
   ### ASSIGN OBSERVED STATES
   startcol<-min(which(woco.obs.matrix[i,2:dim(woco.obs.matrix)[2]]!=5))
   if(startcol>1){
-    if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol)]<-5} else {
+    if(year(daterange$first)<yr) {woco.obs.matrix[i,2:(startcol)]<-NA} else {    ### CHANGED FROM 5 to NA because 2 birds caused problems with wrong f
       woco.obs.matrix[i,2:(startcol)]<-NA}
   }
 
@@ -431,13 +434,13 @@ f.telemetry<-apply(y.telemetry,1,get.first.telemetry)
 l.telemetry<-apply(y.telemetry,1,get.last.telemetry)
 
 
-## check the errors that Jaume found
-# f.telemetry[77]
-# y.telemetry[77,]
-# woco.state.matrix[77,]
-# woco.obs.matrix[77,]
-
-
+## check the errors that Jaume found - solved on 22 Oct 2025
+# f.telemetry[c(61,146)]
+# y.telemetry[c(61,146),]
+# woco_ann_ch_obs[c(61,146),]
+# y.telemetry[c(61,146),]
+# woco_ch %>% dplyr::filter(Ring_num %in% c(115161,116322))
+# woco %>% dplyr::filter(Ring_num %in% c(115161,116322))
 
 
 ############# CHECK THAT PREPARED DATA HAVE NO NA----------
