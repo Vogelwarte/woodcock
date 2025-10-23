@@ -308,6 +308,10 @@ effort_mat<-effort %>%
   select(year,week,scale_eff) %>%
   spread(key=week,value=scale_eff)
 
+## report the proportion of interpolated effort data
+dim(effort[effort$exp_eff>0 & is.na(effort$tot_eff),])/dim(effort)
+
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # CREATE CAPTURE HISTORY FOR SURVIVAL ESTIMATIONS
@@ -399,10 +403,11 @@ z.telemetry<-as.matrix(woco.state.matrix[,2:(dim(woco.state.matrix)[2])])
 dim(y.telemetry)
 
 #### REMOVE individuals with no information (i.e. those that left or were shot before August in a given year, OR only have telemetry locations outside)
-noninfobirds1<-which(apply(y.telemetry, 1, function(x) length(unique(x)) == 1) == TRUE)
-noninfobirds2<-which(apply(y.telemetry, 1, function(x) all(x %in% c(2, 5))))
-noninfobirds3<-which(apply(z.telemetry, 1, function(x) length(unique(x)) == 3) == TRUE)
-noninfobirds<-union(union(noninfobirds1,noninfobirds2), noninfobirds3)
+noninfobirds1<-which(apply(y.telemetry, 1, function(x) length(unique(x)) == 1) == TRUE)  ## only a single state was observed - uninformative
+noninfobirds2<-which(apply(y.telemetry, 1, function(x) all(x %in% c(2, 5))))   ## birds only observed outside
+#noninfobirds3<-which(apply(z.telemetry, 1, function(x) all(x %in% c(3,4))))   ## birds with a true state only outside - removed as equivalent to noninfobirds2
+#noninfobirds<-union(union(noninfobirds1,noninfobirds2), noninfobirds3)
+noninfobirds<-union(noninfobirds1,noninfobirds2)
 y.telemetry<-y.telemetry[-noninfobirds,]
 z.telemetry<-z.telemetry[-noninfobirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
