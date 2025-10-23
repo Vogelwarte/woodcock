@@ -263,9 +263,9 @@ plot(isoscape)
 
 
 
-### 2.3.1. curtail woodcock distribution to potential origin countries and FOREST
+### 2.3.1. curtail woodcock distribution to potential origin countries OUTSIDE OF SWITZERLAND and FOREST
 woco.countries <- EUR %>%
-  dplyr::filter(admin %in% c("Ukraine","Switzerland","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
+  dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
                              "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
 
 ## create a conversion matrix
