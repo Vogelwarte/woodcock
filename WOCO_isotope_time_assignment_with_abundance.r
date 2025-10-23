@@ -602,9 +602,9 @@ FIGURES2
 
 ## report numbers in manuscript
 table(ORIG_WC$AGE)
-length(UNK_WC$dH)/9260
+length(UNK_WC$dH)/9681
 table(UNK_WC$AGE)
-summary(ORIG_WC$dH)
+summary(ORIG_WC$dH[ORIG_WC$PROVENANCE_voigt=="Suisse"])
 summary(UNK_WC$dH)
 
 
