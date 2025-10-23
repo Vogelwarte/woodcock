@@ -187,7 +187,9 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       p.nonlocal.prior2 = woco.unk.sf$abd_prior,
                       # lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
                       # b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
-                      lm.mean.mig=logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[2,1])),
+                      # lm.mean.mig=logit(MCMCsummary(readRDS("output/woco_mig_depart_output_nimble.rds"))[2,1]),  ## became necessary after switching to stepwise run which produces different output than nimbleMCMC
+                      # b.mig.week=MCMCsummary(readRDS("output/woco_mig_depart_output_nimble.rds"))[1,1],  ## became necessary after switching to stepwise run which produces different output than nimbleMCMC
+                      lm.mean.mig=logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[1,1])),
                       b.mig.week=as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[2,1]),
                       unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
                       )
