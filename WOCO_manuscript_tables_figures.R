@@ -34,7 +34,9 @@ select<-dplyr::select
 
 
 ## set root folder for project
-setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock")
+try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"), silent=T)
+try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
+
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
 imgGun<-readPNG("manuscript/rifleicon.png")
 gunicon <- rasterGrob(imgGun, interpolate=TRUE)
@@ -168,7 +170,7 @@ woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
 FIGURE1<-woco_mig %>% 
   group_by(week) %>%
   summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
-  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% #print(n=35)
   
   ggplot()+
   geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
@@ -176,13 +178,13 @@ FIGURE1<-woco_mig %>%
 
   ### add vertical lines to specify key dates OF OLD HUNTING TIMES
   geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
-  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey36", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
   geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
-  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey18", linewidth=2) +
-  geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
-  geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
-  geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
-  
+  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  # geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
+  # geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
+  # geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
+  # 
   
   ### add the bird icons
   annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
@@ -208,7 +210,16 @@ ggsave(plot=FIGURE1,
 
 
 
-
+## 3.1. CALCULATE ANNUAL SURVIVAL ---------
+out<-fread("output/woco_telemetry_seasonal_surv_parm.csv")
+out %>% filter(startsWith(parameter,"mean.phi")) %>%
+  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
+  select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
+  slice_min(median) 
+out %>% filter(startsWith(parameter,"mean.phi")) %>%
+  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
+  select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
+  slice_max(median) 
 
 
 
@@ -231,7 +242,7 @@ FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   ggplot(aes(x=ctn, y=for.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  facet_wrap(~prior, ncol = 2) +
+  facet_wrap(~prior, ncol = 1) +
   
   # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
   # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
@@ -255,7 +266,7 @@ FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.90,0.85),
+        legend.position.inside=c(0.90,0.61),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE2
@@ -263,7 +274,7 @@ FIGURE2
 
 ggsave(plot=FIGURE2,
        filename="manuscript/Figure_2.jpg", 
-       device="jpg",width=12, height=8)
+       device="jpg",width=8, height=12)
 
 
 
@@ -326,7 +337,7 @@ FIGURES2
 
 ## report numbers in manuscript
 table(ORIG_WC$AGE)
-length(UNK_WC$dH)/9260
+length(UNK_WC$dH)/9681
 table(UNK_WC$AGE)
 summary(ORIG_WC$dH)
 summary(UNK_WC$dH)
@@ -402,7 +413,7 @@ ggsave(plot=FIG_s4,
 # 7. FIGURE S3 ----------------------------------
 woco<-fread("data/WOCO_isotopes.csv")
 
-woco$dH<-(woco$dH_scaled - 20.701)/0.979
+woco$dH<-10.774 + (0.852*woco$dH_scaled)
 woco %>% dplyr::filter(is.na(dH))
 ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
   dplyr::filter(!is.na(dH)) %>%
@@ -436,7 +447,7 @@ EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
   dplyr::select(admin,name,adm0_a3,geometry)
 woco.sf <- ORIG_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
   crop(extent(SUI))
 woco.countries <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Switzerland","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
@@ -449,21 +460,21 @@ globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
   crop(woco.countries) %>%
   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
   terra::project(.,crs(isoscape))
-WOCO.isoscape <- readRDS("data/global_d2H_GS_isoscape.rds") %>%
+WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
   crop(woco.countries)
 globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
 WOCO.isoscape <- WOCO.isoscape*globcover
 rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
 rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
 woco.vect<-terra::vect(woco.sf)
-woco.sf$d2h_GS<-terra::extract(isoscape,woco.vect)$d2h
-woco.sf$d2h_se_GS<-terra::extract(isoscape,woco.vect)$d2h.se
+woco.sf$d2h_MA<-terra::extract(isoscape,woco.vect)$d2h_MA
+woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$d2h_se_MA
 woco.unk.sf <- UNK_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 woco.unk.vect<-terra::vect(woco.unk.sf)
 
-woco.unk.sf$d2h_GS<-terra::extract(isoscape,woco.unk.vect)$d2h
-woco.unk.sf$d2h_se_GS<-terra::extract(isoscape,woco.unk.vect)$d2h.se
+woco.unk.sf$d2h_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_MA
+woco.unk.sf$d2h_se_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_se_MA
 woco.unk.sf %>% filter(is.na(AGE))
 
 
@@ -472,7 +483,7 @@ woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
   #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
-  filter(!is.na(d2h_GS))
+  filter(!is.na(d2h_MA))
 
 
 
@@ -482,9 +493,9 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   ## get canton-wise distribution
   woco.cnt <- woco.unk.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
   cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
-    dplyr::select(ID,KANTON,d2h_GS,d2h_se_GS) %>%
+    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) %>%
     rowwise() %>%
-    mutate(pot.orig.d2H=rnorm(1,d2h_GS,d2h_se_GS)) %>%
+    mutate(pot.orig.d2H=rnorm(1,d2h_MA,d2h_se_MA)) %>%
     ungroup() %>%
     group_by(KANTON) %>%
     summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
@@ -495,7 +506,7 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   ## create plot
   plot_list[[ct]] <- ggplot(EUR) +
     geom_sf() +
-    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h))+
+    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h_MA))+
     geom_sf(data=woco.cnt,color="red") +
     geom_sf(data=EUR, colour="grey12", fill=NA) +
     #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
@@ -517,8 +528,8 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   
 } #ct
 
-grid.arrange(grobs=plot_list,ncol=2)
-ggsave(filename="manuscript/Figure_S3.jpg", 
+FIG_S3<-grid.arrange(grobs=plot_list,ncol=2)
+ggsave(filename="manuscript/Figure_S3.jpg", plot=FIG_S3,
        device="jpg",width=8, height=12)
 
 

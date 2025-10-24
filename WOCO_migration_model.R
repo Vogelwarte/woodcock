@@ -427,7 +427,7 @@ names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
 fwrite(out,"output/woco_telemetry_seasonal_surv_parm.csv")
-#out<-fread("output/woco_telemetry_surv_parm_v1.csv")
+#out<-fread("output/woco_telemetry_seasonal_surv_parm.csv")
 
 
 #### CALCULATE APPROXIMATE ANNUAL SURVIVAL
