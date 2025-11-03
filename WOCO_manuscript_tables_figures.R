@@ -278,8 +278,21 @@ ggsave(plot=FIGURE2,
 
 
 
+### extrapolating annual harvest total of Swiss population
 
+npairs<-c(1000,4000) ## from Knaus 2018
+sexratio<-0.5
+productivity<-1.6 ## from Kramer et al. 2019: https://www.sciencedirect.com/science/article/pii/S0006320718314149
+shot<-1820
+tot.birds<-(npairs/sexratio)+npairs*productivity
 
+bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(prior) %>%
+  summarise(for.lcl=quantile(p.nonlocal.mean,0.025), for.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  mutate(min=(1-for.ucl)*shot/tot.birds[2], max=(1-for.lcl)*shot/tot.birds[1])
 
 
 
