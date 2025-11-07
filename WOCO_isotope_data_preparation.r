@@ -30,6 +30,9 @@
 ## revise isoscape and use full annual amount-weighted mean value rather than growing season average
 
 
+## need to add elevation as prior to isotope data and filter out shot birds occurring above 2200 m (the highest breeding record in Switzerland)
+
+
 
 rm(list=ls())
 library(data.table)
@@ -268,11 +271,28 @@ woco.countries <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
                              "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
 
-## create a conversion matrix
+## create conversion matrices
 forest.mat<-matrix(0, nrow=3, ncol=3)
 forest.mat[,1]<-c(11,40,110)  ## from values for conversion matrix
 forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
 forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
+
+ele.mat<-matrix(0, nrow=2, ncol=3)
+ele.mat[,1]<-c(-500,2000)  ## from values for conversion matrix
+ele.mat[,2]<-c(2000,5000)  ## to values for conversion matrix
+ele.mat[,3]<-c(1,0)  ## replacement values for conversion matrix
+
+
+## create elevation raster layer
+dem0<-terra::rast("data/eurodem.tif")
+dem<-terra::rast("data/eurodem.tif") %>%
+  terra::project(.,crs(woco.countries)) %>%
+  crop(woco.countries) %>%
+  terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
+  terra::project(.,crs(isoscape))
+crs(dem)
+summary(dem)
+plot(dem)
 
 ## create forest raster layer
 #globcover<-terra::rast("S:/rasters/landuse/world/globcover2009.tif") %>%
@@ -283,6 +303,9 @@ globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
 crs(globcover)
 summary(globcover)
 plot(globcover)
+
+
+
 
 
 ### 2.3.2. multiply isoscape with woodcock distribution and generate mean feather distribution
