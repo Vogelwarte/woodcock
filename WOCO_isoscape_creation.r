@@ -138,38 +138,33 @@ EuropeIsoscape18 <- isoscape(raster = ElevEurope18,
                              isofit = EuropeFit18)
 
 
+# 5. SAVING / RELOADING ANNUAL ISOSCAPES ----------------
+
+save.image("./data/isoscapes.RData")
+load("./data/isoscapes.RData")
 
 
-# 6. LOADING RAW ISOTOPE DATA ----------------
 
+
+
+
+# 6. EXTRACTING ISOTOPE DISTRIBUTIONS FROM SAMPLED FEATHERS ---------------------
+
+## 6.1. LOADING RAW ISOTOPE DATA ----------------
 
 woco<-fread("data/WOCO_isotopes.csv")
-#woco<-read_excel("output/IsotopeAssignment_Tables.xlsx", sheet="Table14_IsotopeAssignments_Hunt")
 table(woco$JAHR)
 
 
 ## back-convert all measurements to INTERNATIONAL standards following Soto et al 2017
-# woco$dH<-(woco$dH_scaled - 20.701)/0.979 ## discontinued after discussion with David Soto on 20 Oct 2025
 woco$dH<-10.774 + (0.852*woco$dH_scaled)
 woco %>% dplyr::filter(is.na(dH))
 
 
 
 
-## 1.3. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
 
-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
-  geom_histogram(alpha=0.5,position = position_dodge(width=1))
-#ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
-
-
-# distd2H_knownSUI<-hist(ORIG_WC$dH, breaks=seq(-130,30,5))
-# distd2H_knownSUI$density   ## this cannot be used as prior information for the isotope assignment because it is just from a corner of Switzerland
-
-
-
-
-## 1.4. SPLIT INTO KNOWN ORIGIN AND UNKNOWN ----
+## 6.2. SPLIT INTO KNOWN ORIGIN AND UNKNOWN ----
 
 ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
   dplyr::filter(!is.na(dH)) %>%
@@ -185,7 +180,7 @@ UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
 dim(ORIG_WC)
 dim(UNK_WC)
 
-### 1.4.1. add data of known origin provided by andrew Hoodless
+### 6.2.1. add data of known origin provided by andrew Hoodless
 ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
   mutate(ADULTE=ifelse(Age=="Adult",1,0),PROVENANCE_voigt=as.character(LocationCode),
          AGE=ifelse(Age=="Adult", "Adulte","Juvénile")) %>%
@@ -197,7 +192,7 @@ ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
 dim(ORIG_WC)
 
 
-## 1.5. EXTRACT GROWTH SEASON RAIN ISOTOPES ----
+## 6.3. SPecify when feathers were grown -----------
 ## sampled feathers are the first secondary in shot birds and greater coverts in live birds
 ## according to Glutz von Blotzheim adults moult after June until Sept, and juveniles can moult part of their wing coverts and secondaries in Aug/Sept
 
@@ -213,22 +208,11 @@ rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
   mutate(feather_sampling_date=as.Date(sd)) %>%
   dplyr::select(-DATE,-sd,-AGE)
     
-#fwrite(rain_orig_wc,"data/woodcock_known_origin_samples.csv")
 
 
 
-## report numbers in manuscript
-table(ORIG_WC$AGE)
-length(UNK_WC$dH)
-table(UNK_WC$AGE)
-summary(ORIG_WC$dH)
-summary(UNK_WC$dH)
 
-
-
-# 2. EXTRACTING ISOTOPE DISTRIBUTIONS FROM FOREST MAP OF EUROPE ---------------------
-
-## 2.1. load shapefile of Switzerland and EUROPE -------
+## 6.4. load shapefile of Switzerland and EUROPE -------
 ## OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
 
 SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
@@ -243,42 +227,8 @@ EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
 plot(EUR)
 
 
-## 2.2. plot the known origin points of WOCO that were sampled -------
 
-woco.sf <- ORIG_WC %>%
-  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-
-
-ggplot(EUR) +
-  geom_sf() +
-  geom_sf(data=woco.sf,color="red")
-
-
-
-
-
-## 2.3. extract isoscape map of rainwater dH isotope ratios from across the world ----------
-
-### this function throws a weird error - downloaded and ran function independently without problem
-# isoscape <- getIsoscapes(isoType = "GlobalPrecipGS", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
-#   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
-## go to "C:/STEFFEN/Vogelwarte/assignR" and open assignR.Rproj
-## then run the script "DOWNLOAD_ISOSCAPE.R"
-
-### revised on 21 Oct 2025 to adopt David Soto's suggestion that annual mean is better to characterise food web water
-# isoscape <- getIsoscapes(isoType = "GlobalPrecipMA", timeout = 1200) %>%   ## we use MA because that is what Powell's conversion is based on
-#   projectRaster(crs = CRS(SRS_string = 'EPSG:4326'))
-
-isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
-  crop(extent(EUR))
-plot(isoscape)
-## downloaded from Nelson et al 2021, but poor resolution
-# isoscape <- raster("data/Piso.AI_v1.2020_0.5deg_1950-2020.nc") %>%
-#   crop(extent(SUI))
-
-
-
-### 2.3.1. curtail woodcock distribution to potential origin countries OUTSIDE OF SWITZERLAND and FOREST
+### 6.4.1. curtail woodcock distribution to potential origin countries OUTSIDE OF SWITZERLAND and FOREST
 woco.countries <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
                              "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
@@ -297,11 +247,11 @@ ele.mat[,3]<-c(1,0)  ## replacement values for conversion matrix
 
 ## create elevation raster layer
 dem0<-terra::rast("data/eurodem.tif")
-dem<-terra::rast("data/eurodem.tif") %>%
+dem<-dem0 %>%
   terra::project(.,crs(woco.countries)) %>%
   crop(woco.countries) %>%
   terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(isoscape))
+  terra::project(.,crs(EuropeIsoscape18$isoscapes))
 crs(dem)
 summary(dem)
 plot(dem)
@@ -311,7 +261,7 @@ plot(dem)
 globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
   crop(woco.countries) %>%
   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(isoscape))
+  terra::project(.,crs(EuropeIsoscape18$isoscapes))
 crs(globcover)
 summary(globcover)
 plot(globcover)
@@ -320,20 +270,33 @@ plot(globcover)
 
 
 
-### 2.3.2. multiply isoscape with woodcock distribution and generate mean feather distribution
-WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
-  crop(woco.countries)
-plot(WOCO.isoscape)
+### 6.4.2. multiply isoscape with woodcock distribution and generate mean feather distribution
+# WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
+#   crop(woco.countries)
+# plot(WOCO.isoscape)
 
-## remove all non-forest areas by multiplying with 0
-crs(globcover)==crs(WOCO.isoscape)
+
+## check whether crs is the same
+crs(globcover)==crs(EuropeIsoscape18$isoscapes)
 origin(globcover)
-origin(WOCO.isoscape)
+origin(EuropeIsoscape18$isoscapes)
 
-## because the globcover layer has a much finer resolution, we need to resample
-globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
-WOCO.isoscape <- WOCO.isoscape*globcover
-plot(WOCO.isoscape)
+## align extent
+globcover <- terra::resample(globcover, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+dem <- terra::resample(dem, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+
+
+
+## REMOVE FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
+WOCO.isoscape13 <- EuropeIsoscape13$isoscapes %>%
+  crop(woco.countries) *globcover*dem
+
+
+
+
+
+## 6.5. extract hydrogen isotope values from that distribution for each year -------
+
 
 ## extract hydrogen isotope values from that distribution
 rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
