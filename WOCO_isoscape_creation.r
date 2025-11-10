@@ -33,8 +33,10 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 ## manually downloaded on 7 Nov 2025 from https://nucleus.iaea.org/wiser/explore/
 
-GNIPData <- read_excel("./data/GNIP_Wiser_monthly_hydrogen.xlsx") %>%
+GNIPData <- read_excel("./data/GNIP_water_isotopes_download.xlsx") %>%   ## changed from GNIP_Wiser_monthly_hydrogen.xlsxafter downloading longer timeseries 
+  dplyr::filter(Measurand=="H2") %>%  ## added this because I also downloaded rainfall amount
   dplyr::select(SampleSiteName,Latitude, Longitude,Altitude,SampleDate,dH) %>%
+  dplyr::filter(!is.na(dH)) %>%
   dplyr::filter(!is.na(dH)) %>%
   mutate(source_ID=as.factor(SampleSiteName), year=year(SampleDate),month=month(SampleDate)) %>%
   mutate(year=ifelse(month>9,year+1,year)) %>%   ### adjust the year based on the woodcock moult cycle, which is complete in September, so birds with feathers from 2017 will have isotope ratios from Oct 2016 - Sept 2017
@@ -59,6 +61,21 @@ GNIPDataEUagg <- GNIPData %>%
 
 # 2. FITTING GEOSTATISTICAL MODELS ----------------
 
+
+EuropeFit02 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2002,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+EuropeFit05 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2005,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+EuropeFit07 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2007,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+EuropeFit08 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2008,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+EuropeFit09 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2009,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+EuropeFit10 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2010,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+
+
 EuropeFit13 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2013,],
                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
 EuropeFit14 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2014,],
@@ -76,20 +93,47 @@ EuropeFit18 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2018,],
 
 
 # 3. READING IN DEM ----------------
-
+## done once on 10 Nov 2025
 
 #ElevEurope<-terra::rast("data/eurodem.tif")  ## manually downloaded from Copernicus
 # ElevEurope<-getelev(
 #   file = "~/elevation_world_z5.tif",
 #   z = 5,
-#   long_min = -40,
-#   long_max = 120,
-#   lat_min = 20,
-#   lat_max = 90,
-#   margin_pct = 5
+#   long_min = -10,
+#   long_max = 80,
+#   lat_min = 35,
+#   lat_max = 80,
+#   margin_pct = 5,
+#   overwrite = TRUE
 # )
 ElevEurope<- terra::rast('C:/Users/sop/OneDrive - Vogelwarte/Dokumente/elevation_world_z5.tif')
 #plot(ElevEurope)
+
+
+ElevEurope02 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit02,
+                           aggregation_factor = 4)
+
+ElevEurope05 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit05,
+                           aggregation_factor = 4)
+
+ElevEurope07 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit07,
+                           aggregation_factor = 4)
+
+ElevEurope08 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit08,
+                           aggregation_factor = 4)
+
+ElevEurope09 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit09,
+                           aggregation_factor = 4)
+
+ElevEurope10 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit10,
+                           aggregation_factor = 4)
+
 
 
 ElevEurope13 <- prepraster(raster = ElevEurope,
@@ -119,6 +163,27 @@ ElevEurope18 <- prepraster(raster = ElevEurope,
 
 # 4. BUILDING ANNUAL ISOSCAPES ----------------
 
+
+EuropeIsoscape02 <- isoscape(raster = ElevEurope02,
+                             isofit = EuropeFit02)
+
+EuropeIsoscape05 <- isoscape(raster = ElevEurope05,
+                             isofit = EuropeFit05)
+
+EuropeIsoscape07 <- isoscape(raster = ElevEurope07,
+                             isofit = EuropeFit07)
+
+EuropeIsoscape08 <- isoscape(raster = ElevEurope08,
+                             isofit = EuropeFit08)
+
+EuropeIsoscape09 <- isoscape(raster = ElevEurope09,
+                             isofit = EuropeFit09)
+
+EuropeIsoscape10 <- isoscape(raster = ElevEurope10,
+                             isofit = EuropeFit10)
+
+
+
 EuropeIsoscape13 <- isoscape(raster = ElevEurope13,
                              isofit = EuropeFit13)
 
@@ -139,11 +204,22 @@ EuropeIsoscape18 <- isoscape(raster = ElevEurope18,
 
 
 # 5. SAVING / RELOADING ANNUAL ISOSCAPES ----------------
+## THIS CAUSES A CATASTROPHIC DATA LOSS: https://github.com/rspatial/terra/issues/549
+# save.image("./data/isoscapes.RData")
+# load("./data/isoscapes.RData")
 
-save.image("./data/isoscapes.RData")
-load("./data/isoscapes.RData")
-
-
+saveRDS(EuropeIsoscape02,"./data/isoscape02.rds")
+saveRDS(EuropeIsoscape05,"./data/isoscape05.rds")
+saveRDS(EuropeIsoscape07,"./data/isoscape07.rds")
+saveRDS(EuropeIsoscape08,"./data/isoscape08.rds")
+saveRDS(EuropeIsoscape09,"./data/isoscape09.rds")
+saveRDS(EuropeIsoscape10,"./data/isoscape10.rds")
+saveRDS(EuropeIsoscape13,"./data/isoscape13.rds")
+saveRDS(EuropeIsoscape14,"./data/isoscape14.rds")
+saveRDS(EuropeIsoscape15,"./data/isoscape15.rds")
+saveRDS(EuropeIsoscape16,"./data/isoscape16.rds")
+saveRDS(EuropeIsoscape17,"./data/isoscape17.rds")
+saveRDS(EuropeIsoscape18,"./data/isoscape18.rds")
 
 
 
@@ -188,8 +264,10 @@ ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
   rename(ID=RefID, KANTON=Region,
          DATE=Date,LATITUDE=Latitude,LONGITUDE=Longitude) %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
-  bind_rows(ORIG_WC)
+  bind_rows(ORIG_WC) %>%
+  mutate(Year=year(dmy(DATE)))
 dim(ORIG_WC)
+table(ORIG_WC$Year)
 
 
 ## 6.3. SPecify when feathers were grown -----------
@@ -245,9 +323,9 @@ ele.mat[,2]<-c(2000,5000)  ## to values for conversion matrix
 ele.mat[,3]<-c(1,0)  ## replacement values for conversion matrix
 
 
-## create elevation raster layer
-dem0<-terra::rast("data/eurodem.tif")
-dem<-dem0 %>%
+## create elevation raster layer - unnecessary to read in new because ElevEurope already created above
+# dem0<-terra::rast("data/eurodem.tif")
+dem<-ElevEurope %>%
   terra::project(.,crs(woco.countries)) %>%
   crop(woco.countries) %>%
   terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
@@ -259,7 +337,7 @@ plot(dem)
 ## create forest raster layer
 #globcover<-terra::rast("S:/rasters/landuse/world/globcover2009.tif") %>%
 globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
-  crop(woco.countries) %>%
+  terra::crop(woco.countries) %>%
   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
   terra::project(.,crs(EuropeIsoscape18$isoscapes))
 crs(globcover)
@@ -283,7 +361,7 @@ origin(EuropeIsoscape18$isoscapes)
 
 ## align extent
 globcover <- terra::resample(globcover, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
-dem <- terra::resample(dem, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+dem <- terra::resample(ElevEurope, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
 
 
 
@@ -291,6 +369,20 @@ dem <- terra::resample(dem, EuropeIsoscape18$isoscapes, method = "max")  # or me
 WOCO.isoscape13 <- EuropeIsoscape13$isoscapes %>%
   crop(woco.countries) *globcover*dem
 
+WOCO.isoscape14 <- EuropeIsoscape14$isoscapes %>%
+  crop(woco.countries) *globcover*dem
+
+WOCO.isoscape15 <- EuropeIsoscape15$isoscapes %>%
+  crop(woco.countries) *globcover*dem
+
+WOCO.isoscape16 <- EuropeIsoscape16$isoscapes %>%
+  crop(woco.countries) *globcover*dem
+
+WOCO.isoscape17 <- EuropeIsoscape17$isoscapes %>%
+  crop(woco.countries) *globcover*dem
+
+WOCO.isoscape18 <- EuropeIsoscape18$isoscapes %>%
+  crop(woco.countries) *globcover*dem
 
 
 
