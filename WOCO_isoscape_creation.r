@@ -208,19 +208,19 @@ EuropeIsoscape18 <- isoscape(raster = ElevEurope18,
 # save.image("./data/isoscapes.RData")
 # load("./data/isoscapes.RData")
 
-saveRDS(EuropeIsoscape02,"./data/isoscape02.rds")
-saveRDS(EuropeIsoscape05,"./data/isoscape05.rds")
-saveRDS(EuropeIsoscape07,"./data/isoscape07.rds")
-saveRDS(EuropeIsoscape08,"./data/isoscape08.rds")
-saveRDS(EuropeIsoscape09,"./data/isoscape09.rds")
-saveRDS(EuropeIsoscape10,"./data/isoscape10.rds")
-saveRDS(EuropeIsoscape13,"./data/isoscape13.rds")
-saveRDS(EuropeIsoscape14,"./data/isoscape14.rds")
-saveRDS(EuropeIsoscape15,"./data/isoscape15.rds")
-saveRDS(EuropeIsoscape16,"./data/isoscape16.rds")
-saveRDS(EuropeIsoscape17,"./data/isoscape17.rds")
-saveRDS(EuropeIsoscape18,"./data/isoscape18.rds")
-
+# saveRDS(EuropeIsoscape02,"./data/isoscape02.rds")
+# saveRDS(EuropeIsoscape05,"./data/isoscape05.rds")
+# saveRDS(EuropeIsoscape07,"./data/isoscape07.rds")
+# saveRDS(EuropeIsoscape08,"./data/isoscape08.rds")
+# saveRDS(EuropeIsoscape09,"./data/isoscape09.rds")
+# saveRDS(EuropeIsoscape10,"./data/isoscape10.rds")
+# saveRDS(EuropeIsoscape13,"./data/isoscape13.rds")
+# saveRDS(EuropeIsoscape14,"./data/isoscape14.rds")
+# saveRDS(EuropeIsoscape15,"./data/isoscape15.rds")
+# saveRDS(EuropeIsoscape16,"./data/isoscape16.rds")
+# saveRDS(EuropeIsoscape17,"./data/isoscape17.rds")
+# saveRDS(EuropeIsoscape18,"./data/isoscape18.rds")
+# 
 
 
 
@@ -317,10 +317,10 @@ forest.mat[,1]<-c(11,40,110)  ## from values for conversion matrix
 forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
 forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
 
-ele.mat<-matrix(0, nrow=2, ncol=3)
-ele.mat[,1]<-c(-500,2000)  ## from values for conversion matrix
-ele.mat[,2]<-c(2000,5000)  ## to values for conversion matrix
-ele.mat[,3]<-c(1,0)  ## replacement values for conversion matrix
+ele.mat<-matrix(0, nrow=3, ncol=3)
+ele.mat[,1]<-c(-8000,0,2000)  ## from values for conversion matrix
+ele.mat[,2]<-c(0,2000,8000)  ## to values for conversion matrix
+ele.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
 
 
 ## create elevation raster layer - unnecessary to read in new because ElevEurope already created above
@@ -329,7 +329,7 @@ dem<-ElevEurope %>%
   terra::project(.,crs(woco.countries)) %>%
   crop(woco.countries) %>%
   terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(EuropeIsoscape18$isoscapes))
+  terra::project(.,crs(EuropeIsoscape02$isoscapes))
 crs(dem)
 summary(dem)
 plot(dem)
@@ -339,7 +339,7 @@ plot(dem)
 globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
   terra::crop(woco.countries) %>%
   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(EuropeIsoscape18$isoscapes))
+  terra::project(.,crs(EuropeIsoscape02$isoscapes))
 crs(globcover)
 summary(globcover)
 plot(globcover)
@@ -355,34 +355,79 @@ plot(globcover)
 
 
 ## check whether crs is the same
-crs(globcover)==crs(EuropeIsoscape18$isoscapes)
+crs(globcover)==crs(EuropeIsoscape02$isoscapes)
 origin(globcover)
-origin(EuropeIsoscape18$isoscapes)
+origin(EuropeIsoscape02$isoscapes)
+origin(dem)
 
 ## align extent
-globcover <- terra::resample(globcover, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
-dem <- terra::resample(ElevEurope, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+globcover <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+dem <- terra::resample(ElevEurope, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
 
 
+ext(EuropeIsoscape02$isoscapes)
+ext(globcover)
+ext(dem)
 
-## REMOVE FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
-WOCO.isoscape13 <- EuropeIsoscape13$isoscapes %>%
-  crop(woco.countries) *globcover*dem
 
-WOCO.isoscape14 <- EuropeIsoscape14$isoscapes %>%
-  crop(woco.countries) *globcover*dem
+res(EuropeIsoscape02$isoscapes)
+res(globcover)
+res(dem)
 
-WOCO.isoscape15 <- EuropeIsoscape15$isoscapes %>%
-  crop(woco.countries) *globcover*dem
+compareGeom(EuropeIsoscape02$isoscapes, globcover, dem, stopOnError = FALSE)
 
-WOCO.isoscape16 <- EuropeIsoscape16$isoscapes %>%
-  crop(woco.countries) *globcover*dem
 
-WOCO.isoscape17 <- EuropeIsoscape17$isoscapes %>%
-  crop(woco.countries) *globcover*dem
+## REMOVE NON-FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
+# DO NOT USE terra::crop here because it will change the extent of the raster and the multiplication will fail
+WOCO.isoscape02 <- (EuropeIsoscape02$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
 
-WOCO.isoscape18 <- EuropeIsoscape18$isoscapes %>%
-  crop(woco.countries) *globcover*dem
+WOCO.isoscape05 <- (EuropeIsoscape05$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape07 <- (EuropeIsoscape07$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape08 <- (EuropeIsoscape08$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape09 <- (EuropeIsoscape09$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape10 <- (EuropeIsoscape10$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+WOCO.isoscape18 <- (EuropeIsoscape18$isoscapes %>%
+  terra::mask(woco.countries))*globcover*dem
+
+
+saveRDS(EuropeIsoscape02,"./data/isoscape02.rds")
+saveRDS(EuropeIsoscape05,"./data/isoscape05.rds")
+saveRDS(EuropeIsoscape07,"./data/isoscape07.rds")
+saveRDS(EuropeIsoscape08,"./data/isoscape08.rds")
+saveRDS(EuropeIsoscape09,"./data/isoscape09.rds")
+saveRDS(EuropeIsoscape10,"./data/isoscape10.rds")
+saveRDS(EuropeIsoscape13,"./data/isoscape13.rds")
+saveRDS(EuropeIsoscape14,"./data/isoscape14.rds")
+saveRDS(EuropeIsoscape15,"./data/isoscape15.rds")
+saveRDS(EuropeIsoscape16,"./data/isoscape16.rds")
+saveRDS(EuropeIsoscape17,"./data/isoscape17.rds")
+saveRDS(EuropeIsoscape18,"./data/isoscape18.rds")
 
 
 
@@ -391,7 +436,7 @@ WOCO.isoscape18 <- EuropeIsoscape18$isoscapes %>%
 
 
 ## extract hydrogen isotope values from that distribution
-rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
+rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape02[[1]])[,1]))
 rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
 mean.rain.d2H<-mean(rain.d2H, na.rm=T)
 sd.rain.d2H<-sd(rain.d2H, na.rm=T)
@@ -400,16 +445,17 @@ hist(rnorm(1000,mean.rain.d2H,sd.rain.d2H))
 
 
 
-## 2.4. use known origin data to calibrate rainwater against feather d2H  -------
+## 6.6. use known origin data to calibrate rainwater against feather d2H  -------
 
 
-### 2.4.1 convert woco data to SpatVector to extract values from raster ------
-
+### 6.6.1 convert woco data to SpatVector to extract values from raster ------
+woco.sf <- ORIG_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 woco.vect<-terra::vect(woco.sf)
 
 
-## 2.4.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
+## 6.6.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
 
-woco.sf$d2h_MA<-terra::extract(isoscape,woco.vect)$d2h_MA
-woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$d2h_se_MA
+woco.sf$d2h_MA<-terra::extract(WOCO.isoscape02,woco.vect)$mean
+woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$mean_predVar
 
