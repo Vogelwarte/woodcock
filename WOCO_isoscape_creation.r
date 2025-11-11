@@ -37,13 +37,12 @@ GNIPData <- read_excel("./data/GNIP_water_isotopes_download.xlsx") %>%   ## chan
   dplyr::filter(Measurand=="H2") %>%  ## added this because I also downloaded rainfall amount
   dplyr::select(SampleSiteName,Latitude, Longitude,Altitude,SampleDate,dH) %>%
   dplyr::filter(!is.na(dH)) %>%
-  dplyr::filter(!is.na(dH)) %>%
   mutate(source_ID=as.factor(SampleSiteName), year=year(SampleDate),month=month(SampleDate)) %>%
   mutate(year=ifelse(month>9,year+1,year)) %>%   ### adjust the year based on the woodcock moult cycle, which is complete in September, so birds with feathers from 2017 will have isotope ratios from Oct 2016 - Sept 2017
   rename(lat=Latitude, long=Longitude, source_value=dH, elev=Altitude) %>%
   dplyr::select(source_ID,lat,long,elev,year,month,source_value)
 head(GNIPData)
-
+hist(GNIPData$source_value)
 
 
 # GNIPDataEUagg_test <- prepsources(data = GNIPData,
@@ -63,6 +62,8 @@ GNIPDataEUagg <- GNIPData %>%
 
 
 EuropeFit02 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2002,],
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+EuropeFit03 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2003,],
                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
 EuropeFit05 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2005,],
                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
@@ -112,6 +113,10 @@ ElevEurope<- terra::rast('C:/Users/sop/OneDrive - Vogelwarte/Dokumente/elevation
 
 ElevEurope02 <- prepraster(raster = ElevEurope,
                            isofit = EuropeFit02,
+                           aggregation_factor = 4)
+
+ElevEurope03 <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit03,
                            aggregation_factor = 4)
 
 ElevEurope05 <- prepraster(raster = ElevEurope,
@@ -167,6 +172,9 @@ ElevEurope18 <- prepraster(raster = ElevEurope,
 EuropeIsoscape02 <- isoscape(raster = ElevEurope02,
                              isofit = EuropeFit02)
 
+EuropeIsoscape03 <- isoscape(raster = ElevEurope03,
+                             isofit = EuropeFit03)
+
 EuropeIsoscape05 <- isoscape(raster = ElevEurope05,
                              isofit = EuropeFit05)
 
@@ -181,8 +189,6 @@ EuropeIsoscape09 <- isoscape(raster = ElevEurope09,
 
 EuropeIsoscape10 <- isoscape(raster = ElevEurope10,
                              isofit = EuropeFit10)
-
-
 
 EuropeIsoscape13 <- isoscape(raster = ElevEurope13,
                              isofit = EuropeFit13)
@@ -264,17 +270,16 @@ ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
   rename(ID=RefID, KANTON=Region,
          DATE=Date,LATITUDE=Latitude,LONGITUDE=Longitude) %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
-  bind_rows(ORIG_WC) %>%
-  mutate(Year=year(dmy(DATE)))
+  bind_rows(ORIG_WC)
 dim(ORIG_WC)
 table(ORIG_WC$Year)
-
+summary(ORIG_WC)
 
 ## 6.3. SPecify when feathers were grown -----------
 ## sampled feathers are the first secondary in shot birds and greater coverts in live birds
 ## according to Glutz von Blotzheim adults moult after June until Sept, and juveniles can moult part of their wing coverts and secondaries in Aug/Sept
 
-rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
+ORIG_WC<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
   mutate(sd=parse_date_time(DATE, orders="dmy")) %>%
   mutate(feather_growth_date=if_else(AGE=="Adulte",
                                       if_else(month(sd)<7,
@@ -284,7 +289,22 @@ rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
                                              ymd(paste(year(sd)-1,"-05-15")),
                                              ymd(paste(year(sd),"-08-15"))))) %>%
   mutate(feather_sampling_date=as.Date(sd)) %>%
-  dplyr::select(-DATE,-sd,-AGE)
+  mutate(Year=year(feather_growth_date)) %>%
+  dplyr::select(-DATE,-sd)
+
+
+UNK_WC<-UNK_WC %>% 
+  mutate(AGE=ifelse(is.na(AGE), "Juvénile",AGE)) %>%  ## fill in ages for 10 birds shot in Ticino in October - very likely juveniles
+  mutate(feather_growth_date=if_else(AGE=="Adulte",
+                                     if_else(month(DATE)<7,
+                                             ymd(paste(year(DATE)-1,"-06-15")),
+                                             ymd(paste(year(DATE),"-06-15"))),
+                                     if_else(month(DATE)<9,
+                                             ymd(paste(year(DATE)-1,"-05-15")),
+                                             ymd(paste(year(DATE),"-08-15"))))) %>%
+  mutate(feather_sampling_date=as.Date(DATE)) %>%
+  mutate(Year=year(feather_growth_date)) %>%
+  dplyr::select(-DATE)
     
 
 
@@ -306,10 +326,15 @@ plot(EUR)
 
 
 
-### 6.4.1. curtail woodcock distribution to potential origin countries OUTSIDE OF SWITZERLAND and FOREST
+### 6.4.1. curtail woodcock distribution to potential origin countries INCLUDING UK AND SWITZERLAND FOR CALIBRATION
 woco.countries <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
-                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium", "Switzerland","France","United Kingdom","Spain","Italy"))
+
+
+
+
+## 6.5. curtail woodcock distribution to forest and elevation <2000 m ---------------
 
 ## create conversion matrices
 forest.mat<-matrix(0, nrow=3, ncol=3)
@@ -327,7 +352,7 @@ ele.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
 # dem0<-terra::rast("data/eurodem.tif")
 dem<-ElevEurope %>%
   terra::project(.,crs(woco.countries)) %>%
-  crop(woco.countries) %>%
+  terra::crop(woco.countries) %>%
   terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
   terra::project(.,crs(EuropeIsoscape02$isoscapes))
 crs(dem)
@@ -345,117 +370,281 @@ summary(globcover)
 plot(globcover)
 
 
-
-
-
-### 6.4.2. multiply isoscape with woodcock distribution and generate mean feather distribution
-# WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
-#   crop(woco.countries)
-# plot(WOCO.isoscape)
-
-
 ## check whether crs is the same
-crs(globcover)==crs(EuropeIsoscape02$isoscapes)
-origin(globcover)
-origin(EuropeIsoscape02$isoscapes)
-origin(dem)
-
-## align extent
-globcover <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-dem <- terra::resample(ElevEurope, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-
-
-ext(EuropeIsoscape02$isoscapes)
-ext(globcover)
-ext(dem)
-
-
-res(EuropeIsoscape02$isoscapes)
-res(globcover)
-res(dem)
-
-compareGeom(EuropeIsoscape02$isoscapes, globcover, dem, stopOnError = FALSE)
+# crs(globcover)==crs(EuropeIsoscape02$isoscapes)
+# origin(globcover)
+# origin(EuropeIsoscape02$isoscapes)
+# origin(dem)
+# 
+# ## align extent
+# globcover <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem <- terra::resample(ElevEurope, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+# 
+# 
+# ext(EuropeIsoscape05$isoscapes)
+# ext(globcover)
+# ext(dem)
+# 
+# 
+# res(EuropeIsoscape05$isoscapes)
+# res(globcover)
+# res(dem)
+# 
+# compareGeom(EuropeIsoscape02$isoscapes, globcover, dem, stopOnError = FALSE)
 
 
 ## REMOVE NON-FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
 # DO NOT USE terra::crop here because it will change the extent of the raster and the multiplication will fail
+
+globcover02 <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+dem02 <- terra::resample(dem, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape02 <- (EuropeIsoscape02$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover02*dem02
+rm(globcover02,dem02)
+gc()
 
+globcover03 <- terra::resample(globcover, EuropeIsoscape03$isoscapes, method = "max")  # or method = "near" for categorical data
+dem03 <- terra::resample(dem, EuropeIsoscape03$isoscapes, method = "max")  # or method = "near" for categorical data
+WOCO.isoscape03 <- (EuropeIsoscape03$isoscapes %>%
+                      terra::mask(woco.countries))*globcover03*dem03
+rm(globcover03,dem03)
+gc()
+
+globcover05 <- terra::resample(globcover, EuropeIsoscape05$isoscapes, method = "max")  # or method = "near" for categorical data
+dem05 <- terra::resample(dem, EuropeIsoscape05$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape05 <- (EuropeIsoscape05$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover05*dem05
+rm(globcover05,dem05)
+gc()
 
+globcover07 <- terra::resample(globcover, EuropeIsoscape07$isoscapes, method = "max")  # or method = "near" for categorical data
+dem07 <- terra::resample(dem, EuropeIsoscape07$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape07 <- (EuropeIsoscape07$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover07*dem07
+rm(globcover07,dem07)
+gc()
 
+globcover08 <- terra::resample(globcover, EuropeIsoscape08$isoscapes, method = "max")  # or method = "near" for categorical data
+dem08 <- terra::resample(dem, EuropeIsoscape08$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape08 <- (EuropeIsoscape08$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover08*dem08
+rm(globcover08,dem08)
+gc()
 
+globcover09 <- terra::resample(globcover, EuropeIsoscape09$isoscapes, method = "max")  # or method = "near" for categorical data
+dem09 <- terra::resample(dem, EuropeIsoscape09$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape09 <- (EuropeIsoscape09$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover09*dem09
+rm(globcover09,dem09)
+gc()
 
+globcover10 <- terra::resample(globcover, EuropeIsoscape10$isoscapes, method = "max")  # or method = "near" for categorical data
+dem10 <- terra::resample(dem, EuropeIsoscape10$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape10 <- (EuropeIsoscape10$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover10*dem10
+rm(globcover10,dem10)
+gc()
 
+globcover13 <- terra::resample(globcover, EuropeIsoscape13$isoscapes, method = "max")  # or method = "near" for categorical data
+dem13 <- terra::resample(dem, EuropeIsoscape13$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover13*dem13
+rm(globcover13,dem13)
+gc()
 
+globcover14 <- terra::resample(globcover, EuropeIsoscape14$isoscapes, method = "max")  # or method = "near" for categorical data
+dem14 <- terra::resample(dem, EuropeIsoscape14$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover14*dem14
+rm(globcover14,dem14)
+gc()
 
+globcover15 <- terra::resample(globcover, EuropeIsoscape15$isoscapes, method = "max")  # or method = "near" for categorical data
+dem15 <- terra::resample(dem, EuropeIsoscape15$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover15*dem15
+rm(globcover15,dem15)
+gc()
 
+globcover16 <- terra::resample(globcover, EuropeIsoscape16$isoscapes, method = "max")  # or method = "near" for categorical data
+dem16 <- terra::resample(dem, EuropeIsoscape16$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover16*dem16
+rm(globcover16,dem16)
+gc()
 
+globcover17 <- terra::resample(globcover, EuropeIsoscape17$isoscapes, method = "max")  # or method = "near" for categorical data
+dem17 <- terra::resample(dem, EuropeIsoscape17$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover17*dem17
+rm(globcover17,dem17)
+gc()
 
+globcover18 <- terra::resample(globcover, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+dem18 <- terra::resample(dem, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape18 <- (EuropeIsoscape18$isoscapes %>%
-  terra::mask(woco.countries))*globcover*dem
+  terra::mask(woco.countries))*globcover18*dem18
+rm(globcover18,dem18)
+gc()
 
 
-saveRDS(EuropeIsoscape02,"./data/isoscape02.rds")
-saveRDS(EuropeIsoscape05,"./data/isoscape05.rds")
-saveRDS(EuropeIsoscape07,"./data/isoscape07.rds")
-saveRDS(EuropeIsoscape08,"./data/isoscape08.rds")
-saveRDS(EuropeIsoscape09,"./data/isoscape09.rds")
-saveRDS(EuropeIsoscape10,"./data/isoscape10.rds")
-saveRDS(EuropeIsoscape13,"./data/isoscape13.rds")
-saveRDS(EuropeIsoscape14,"./data/isoscape14.rds")
-saveRDS(EuropeIsoscape15,"./data/isoscape15.rds")
-saveRDS(EuropeIsoscape16,"./data/isoscape16.rds")
-saveRDS(EuropeIsoscape17,"./data/isoscape17.rds")
-saveRDS(EuropeIsoscape18,"./data/isoscape18.rds")
+saveRDS(WOCO.isoscape02,"./data/isoscape02.rds")
+saveRDS(WOCO.isoscape03,"./data/isoscape03.rds")
+saveRDS(WOCO.isoscape05,"./data/isoscape05.rds")
+saveRDS(WOCO.isoscape07,"./data/isoscape07.rds")
+saveRDS(WOCO.isoscape08,"./data/isoscape08.rds")
+saveRDS(WOCO.isoscape09,"./data/isoscape09.rds")
+saveRDS(WOCO.isoscape10,"./data/isoscape10.rds")
+saveRDS(WOCO.isoscape13,"./data/isoscape13.rds")
+saveRDS(WOCO.isoscape14,"./data/isoscape14.rds")
+saveRDS(WOCO.isoscape15,"./data/isoscape15.rds")
+saveRDS(WOCO.isoscape16,"./data/isoscape16.rds")
+saveRDS(WOCO.isoscape17,"./data/isoscape17.rds")
+saveRDS(WOCO.isoscape18,"./data/isoscape18.rds")
 
 
-
-
-## 6.5. extract hydrogen isotope values from that distribution for each year -------
-
-
-## extract hydrogen isotope values from that distribution
-rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape02[[1]])[,1]))
-rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
-mean.rain.d2H<-mean(rain.d2H, na.rm=T)
-sd.rain.d2H<-sd(rain.d2H, na.rm=T)
-hist(rnorm(1000,mean.rain.d2H,sd.rain.d2H))
+isoscapes<-list(WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
+                WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17,WOCO.isoscape18)
 
 
 
+## 6.6. extract hydrogen isotope values from that distribution for each year for calibration -------
 
-## 6.6. use known origin data to calibrate rainwater against feather d2H  -------
-
-
-### 6.6.1 convert woco data to SpatVector to extract values from raster ------
+### 6.6.1 convert known origin woco data to SpatVector to extract values from raster ------
 woco.sf <- ORIG_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
 woco.vect<-terra::vect(woco.sf)
 
+yearlist<-c(2002,2003,2005,2007,2008,2009,2010,2013,2014,2015,2016,2017,2018)
 
-## 6.6.2. extract rainwater hydrogen isotopes for the location of known-sample woodcocks -------
 
-woco.sf$d2h_MA<-terra::extract(WOCO.isoscape02,woco.vect)$mean
-woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$mean_predVar
+for (y in sort(unique(woco.sf$Year))){
+  
+  woco.sf$d2h_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean
+  woco.sf$d2h_se_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean_predVar
+  
+}
+
+
+
+### 6.6.2 convert unknown origin woco data to SpatVector to extract LOCAL values from raster ------
+woco.unk.sf <- UNK_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+woco.unk.vect<-terra::vect(woco.unk.sf)
+
+for (y in sort(unique(woco.unk.sf$Year))){
+  
+  woco.unk.sf$d2h_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean
+  woco.unk.sf$d2h_se_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean_predVar
+  
+}
+
+
+
+
+
+
+
+## 6.7. extract hydrogen isotope values from that distribution for each year for calibration -------
+
+### need to curtail countries to potential origin (not including calibration countries like SUI, UK, F, ESP)
+woco.countries.orig <- EUR %>%
+  dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+
+WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
+                      terra::mask(woco.countries.orig ))
+WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
+                      terra::mask(woco.countries.orig ))
+WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
+                      terra::mask(woco.countries.orig ))
+WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
+                      terra::mask(woco.countries.orig ))
+WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
+                      terra::mask(woco.countries.orig ))
+
+
+isoscapes.orig<-list(WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17)
+
+
+## extract mean hydrogen isotope values and sd from that distribution
+
+mean.rain.d2H<-as.numeric()
+sd.rain.d2H<-as.numeric()
+yearlist<-c(2013,2014,2015,2016,2017)
+
+
+for (y in sort(unique(UNK_WC$Year))){
+  
+  rain.d2H<-as.numeric(na.omit(terra::values(isoscapes.orig[[match(y,yearlist)]])[,1]))
+  rain.d2H<-rain.d2H[rain.d2H!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+  mean.rain.d2H[match(y,yearlist)]<-mean(rain.d2H, na.rm=T)
+  sd.rain.d2H[match(y,yearlist)]<-sd(rain.d2H, na.rm=T)
+  
+}
+
+
+
+
+
+# 7. include phenology data to integrate probability of non-local origin based on date a bird was shot ----------
+
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds") %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  mutate(prop.remain=1-prop_mig) %>% 
+  group_by(week, Date) %>%
+  summarise(mig=quantile(prop.remain,0.5),mig.lcl=quantile(prop.remain,0.025),mig.ucl=quantile(prop.remain,0.975))
+
+woco_abundance<-fread("data/AnnualPhenology_abundance_index.csv") %>%
+  mutate(Date=lubridate::ymd("2023-12-27") + lubridate::days(Pentade*5)) %>%
+  mutate(abund=SOPM/max(SOPM)) %>%
+  dplyr::filter(Date>=min(woco_mig$Date))
+
+shot_dates<-hist(lubridate::yday(UNK_WC$DATE), breaks=seq(250,365,7),plot=F)
+woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
+  mutate(Date=parse_date_time(as.integer(yday), orders="j")) %>%
+  mutate(abund=N/max(N)) %>%
+  mutate(Date=as.Date(Date-years(1)))
+
+
+
+# 8. clean up and save workspace -------
+
+
+## 8.1. prepare the data needed for NIMBLE input ----
+woco.unk.sf <- woco.unk.sf %>%
+  filter(!is.na(AGE)) %>%
+  filter(!is.na(dH)) %>%
+  #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
+  filter(!is.na(d2h_MA))
+
+woco.sf <- woco.sf %>%
+  filter(!is.na(AGE)) %>%
+  filter(!is.na(dH)) %>%
+  filter(!is.na(d2h_MA))
+
+table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
+
+
+rm(isoscapes, globcover,forest.mat, isoscapes.orig,WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
+   WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17,WOCO.isoscape18,ElevEurope,ElevEurope02,ElevEurope03,ElevEurope05,ElevEurope07,ElevEurope08,ElevEurope09,ElevEurope10,ElevEurope13,ElevEurope14,ElevEurope15,ElevEurope16,ElevEurope17,ElevEurope18,      
+EuropeFit02,EuropeFit03,EuropeFit05,EuropeFit07,EuropeFit08,EuropeFit09,EuropeFit10,EuropeFit13,EuropeFit14,EuropeFit15,EuropeFit16,EuropeFit17,EuropeFit18,EuropeIsoscape02,EuropeIsoscape03,EuropeIsoscape05,EuropeIsoscape07,EuropeIsoscape08,EuropeIsoscape09,
+EuropeIsoscape10,EuropeIsoscape13,EuropeIsoscape14,EuropeIsoscape15,EuropeIsoscape16,EuropeIsoscape17,EuropeIsoscape18)
+gc()
+
+save.image("data/woco.input.data.annual.RData")
+
+
+
+
+## 8.2. remove non-SUI calibration data and create reduced input data ----
+
+woco.sf <- woco.sf %>%
+  filter(nchar(KANTON)==2) 
+dim(woco.sf)
+save.image("data/woco.reduced.input.data.annual.RData")
+
+
+
+
 
