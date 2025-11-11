@@ -539,10 +539,10 @@ for (y in sort(unique(woco.unk.sf$Year))){
   
 }
 
-
-
-
-
+## check elevation distribution of shot birds
+summary(terra::extract(ElevEurope,woco.unk.vect))
+hist(terra::extract(ElevEurope,woco.unk.vect)$elevation_world_z5)
+length(which(terra::extract(ElevEurope,woco.unk.vect)$elevation_world_z5>2200))
 
 
 ## 6.7. extract hydrogen isotope values from that distribution for each year for calibration -------
