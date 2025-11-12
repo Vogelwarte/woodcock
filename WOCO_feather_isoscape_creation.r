@@ -149,17 +149,17 @@ UNK_WC$elev<-terra::extract(ElevEurope,woco.unk.vect)$elevation_world_z5
 
 ## 2.1. Formatting the input data as they are needed -------
 ORIG_WC<-ORIG_WC %>%
-  rename(source_ID=ID,lat=LATITUDE, long=LONGITUDE, source_value=dH) %>%
-  dplyr::select(source_ID,lat,long,elev,source_value)
+  rename(source_ID=ID,lat=LATITUDE, long=LONGITUDE, mean_source_value=dH) %>%
+  dplyr::select(source_ID,lat,long,elev,mean_source_value)
 head(ORIG_WC)
-hist(ORIG_WC$source_value)
+hist(ORIG_WC$mean_source_value)
 
 ## calculating variance
 vardH<-ORIG_WC %>% group_by(lat,long,elev) %>%
-  summarise(var_source_value=var(source_value), n_source_value=length(source_value)) %>%
+  summarise(var_source_value=var(mean_source_value), n_source_value=length(mean_source_value)) %>%
   arrange(desc(var_source_value))
 
-## adding variance to dataset
+# adding variance to dataset
 ORIG_WC<-ORIG_WC %>%
   left_join(vardH, by=c('lat','long','elev')) %>%
   mutate(var_source_value=ifelse(is.na(var_source_value),max(vardH$var_source_value,na.rm=T),var_source_value)) %>%
@@ -167,59 +167,59 @@ ORIG_WC<-ORIG_WC %>%
   ungroup() %>%
   group_by(source_ID, lat, long, elev)
 
+# ORIG_WC_agg<-ORIG_WC %>%
+#   group_by(lat,long,elev) %>%
+#   summarise(source_ID=first(source_ID), mean_source_value=mean(source_value),var_source_value=var(source_value), n_source_value=length(source_value)) %>%
+#   mutate(var_source_value=ifelse(is.na(var_source_value),max(vardH$var_source_value,na.rm=T),var_source_value)) %>%
+#   mutate(n_source_value=ifelse(n_source_value<5,5,n_source_value))
+
 
 which(is.na(ORIG_WC)==TRUE)
+
+
 
 ## 2.2. fitting geostatistical model -----------
 
 
 
 EuropeFit <- isofit(data = ORIG_WC,
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE, long_abs=TRUE))
 
 
 
 
-# 3. READING IN DEM ----------------
-## done once on 10 Nov 2025
+# 3. ADJUSTING THE DEM ----------------
 
-#ElevEurope<-terra::rast("data/eurodem.tif")  ## manually downloaded from Copernicus
-# ElevEurope<-getelev(
-#   file = "~/elevation_world_z5.tif",
-#   z = 5,
-#   long_min = -10,
-#   long_max = 80,
-#   lat_min = 35,
-#   lat_max = 80,
-#   margin_pct = 5,
-#   overwrite = TRUE
-# )
-ElevEurope<- terra::rast('C:/Users/sop/OneDrive - Vogelwarte/Dokumente/elevation_world_z5.tif')
-#plot(ElevEurope)
-
-
-ElevEurope02 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit02,
+ElevEurope <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFit,
                            aggregation_factor = 4)
 
 
 
 
 
-# 4. BUILDING ANNUAL ISOSCAPES ----------------
+# 4. BUILDING WOODCOCK FEATHER ISOSCAPES ----------------
 
 
-EuropeIsoscape02 <- isoscape(raster = ElevEurope02,
-                             isofit = EuropeFit02)
+EuropeIsoscape <- isoscape(raster = ElevEurope,
+                             isofit = EuropeFit)
 
 
-
+plot(EuropeIsoscape)
 
 
 
 # 6. EXTRACTING ISOTOPE DISTRIBUTIONS FROM SAMPLED FEATHERS ---------------------
 
 
+
+
+woco.vect<-terra::vect(woco.sf)
+
+woco.sf$d2h_predicted<-terra::extract(EuropeIsoscape$isoscapes,woco.vect)$mean
+
+
+plot(woco.sf$dH~woco.sf$d2h_predicted)
 
 
 
