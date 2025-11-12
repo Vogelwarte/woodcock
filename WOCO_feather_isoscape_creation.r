@@ -149,8 +149,8 @@ UNK_WC$elev<-terra::extract(ElevEurope,woco.unk.vect)$elevation_world_z5
 
 ## 2.1. Formatting the input data as they are needed -------
 ORIG_WC<-ORIG_WC %>%
-  rename(source_ID=ID,lat=LATITUDE, long=LONGITUDE, mean_source_value=dH) %>%
-  dplyr::select(source_ID,lat,long,elev,mean_source_value)
+  rename(source_ID=ID,lat=LATITUDE, long=LONGITUDE, mean_source_value=dH, age=ADULTE) %>%
+  dplyr::select(source_ID,lat,long,elev,age,mean_source_value)
 head(ORIG_WC)
 hist(ORIG_WC$mean_source_value)
 
@@ -178,49 +178,57 @@ which(is.na(ORIG_WC)==TRUE)
 
 
 
-## 2.2. fitting geostatistical model -----------
+## 2.2. fitting geostatistical model PER AGE CLASS -----------
 
 
 
-EuropeFit <- isofit(data = ORIG_WC,
+EuropeFitAD <- isofit(data = ORIG_WC[ORIG_WC$age==1,],
                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE, long_abs=TRUE))
+
+EuropeFitJuv <- isofit(data = ORIG_WC[ORIG_WC$age==0,],
+                    mean_model_fix = list(elev = TRUE, lat_abs = TRUE, long_abs=TRUE))
 
 
 
 
 # 3. ADJUSTING THE DEM ----------------
 
-ElevEurope <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit,
+ElevEuropeAD <- prepraster(raster = ElevEurope,
+                           isofit = EuropeFitAD,
                            aggregation_factor = 4)
 
-
+ElevEuropeJuv <- prepraster(raster = ElevEurope,
+                         isofit = EuropeFitJuv,
+                         aggregation_factor = 4)
 
 
 
 # 4. BUILDING WOODCOCK FEATHER ISOSCAPES ----------------
 
 
-EuropeIsoscape <- isoscape(raster = ElevEurope,
-                             isofit = EuropeFit)
+EuropeIsoscapeAD <- isoscape(raster = ElevEuropeAD,
+                             isofit = EuropeFitAD)
 
 
-plot(EuropeIsoscape)
+EuropeIsoscapeJuv <- isoscape(raster = ElevEuropeJuv,
+                           isofit = EuropeFitJuv)
 
+plot(EuropeIsoscapeAD)
+plot(EuropeIsoscapeJuv)
 
 
 # 6. EXTRACTING ISOTOPE DISTRIBUTIONS FROM SAMPLED FEATHERS ---------------------
-
-
-
 
 woco.vect<-terra::vect(woco.sf)
 
 woco.sf$d2h_predicted<-terra::extract(EuropeIsoscape$isoscapes,woco.vect)$mean
 
-
 plot(woco.sf$dH~woco.sf$d2h_predicted)
 
+
+woco.unk.sf$d2h_local_predicted<-terra::extract(EuropeIsoscape$isoscapes,woco.unk.vect)$mean
+woco.unk.sf$d2h_local_sd<-sqrt(terra::extract(EuropeIsoscape$isoscapes,woco.unk.vect)$mean_residVar)
+plot(woco.unk.sf$dH~woco.unk.sf$d2h_local_predicted)
 
 
 
