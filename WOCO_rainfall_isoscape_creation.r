@@ -107,7 +107,7 @@ EuropeFit18 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2018,],
 #   margin_pct = 5,
 #   overwrite = TRUE
 # )
-ElevEurope<- terra::rast('C:/Users/sop/OneDrive - Vogelwarte/Dokumente/elevation_world_z5.tif')
+ElevEurope<- terra::rast('data/elevation_world_z5.tif')
 #plot(ElevEurope)
 
 
