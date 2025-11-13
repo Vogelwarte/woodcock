@@ -303,103 +303,46 @@ summary(globcover)
 plot(globcover)
 
 
-## align extent
-
-
-
 ## REMOVE NON-FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
 # DO NOT USE terra::crop here because it will change the extent of the raster and the multiplication will fail
+## align extent
+globcoverAD <- terra::resample(globcover, EuropeIsoscapeAD$isoscapes, method = "max")  # or method = "near" for categorical data
+demAD <- terra::resample(dem, EuropeIsoscapeAD$isoscapes, method = "max")  # or method = "near" for categorical data
+WOCO.isoscapeAD <- (EuropeIsoscapeAD$isoscapes %>%
+  terra::mask(woco.countries))*globcoverAD*demAD
 
-globcoverAD <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-dem02 <- terra::resample(dem, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape02 <- (EuropeIsoscape02$isoscapes %>%
-  terra::mask(woco.countries))*globcover02*dem02
-rm(globcover02,dem02)
-gc()
-
-
-
-
-saveRDS(WOCO.isoscape02,"./data/isoscape02.rds")
+globcoverJuv <- terra::resample(globcover, EuropeIsoscapeJuv$isoscapes, method = "max")  # or method = "near" for categorical data
+demJuv <- terra::resample(dem, EuropeIsoscapeJuv$isoscapes, method = "max")  # or method = "near" for categorical data
+WOCO.isoscapeJuv <- (EuropeIsoscapeJuv$isoscapes %>%
+                      terra::mask(woco.countries))*globcoverJuv*demJuv
 
 
 
-## 6.6. extract hydrogen isotope values from that distribution for each year for calibration -------
-
-### 6.6.1 convert known origin woco data to SpatVector to extract values from raster ------
-woco.sf <- ORIG_WC %>%
-  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-woco.vect<-terra::vect(woco.sf)
-
-yearlist<-c(2002,2003,2005,2007,2008,2009,2010,2013,2014,2015,2016,2017,2018)
-
-
-for (y in sort(unique(woco.sf$Year))){
-  
-  woco.sf$d2h_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean
-  woco.sf$d2h_se_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean_predVar
-  
-}
+saveRDS(WOCO.isoscapeAD,"./data/isoscapeAD.rds")
+saveRDS(WOCO.isoscapeJuv,"./data/isoscapeJuv.rds")
 
 
 
-### 6.6.2 convert unknown origin woco data to SpatVector to extract LOCAL values from raster ------
-woco.unk.sf <- UNK_WC %>%
-  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-woco.unk.vect<-terra::vect(woco.unk.sf)
-
-for (y in sort(unique(woco.unk.sf$Year))){
-  
-  woco.unk.sf$d2h_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean
-  woco.unk.sf$d2h_se_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean_predVar
-  
-}
-
-## check elevation distribution of shot birds
-summary(terra::extract(ElevEurope,woco.unk.vect))
-hist(terra::extract(ElevEurope,woco.unk.vect)$elevation_world_z5)
-length(which(terra::extract(ElevEurope,woco.unk.vect)$elevation_world_z5>2200))
 
 
-## 6.7. extract hydrogen isotope values from that distribution for each year for calibration -------
-
-### need to curtail countries to potential origin (not including calibration countries like SUI, UK, F, ESP)
-woco.countries.orig <- EUR %>%
-  dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
-                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
-
-WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
-                      terra::mask(woco.countries.orig ))
-WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
-                      terra::mask(woco.countries.orig ))
-WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
-                      terra::mask(woco.countries.orig ))
-WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
-                      terra::mask(woco.countries.orig ))
-WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
-                      terra::mask(woco.countries.orig ))
+## 6.4. extract hydrogen isotope values from that distribution for each age group -------
 
 
-isoscapes.orig<-list(WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17)
+mean.rain.d2H.juv<-as.numeric()
+sd.rain.d2H.juv<-as.numeric()
 
+mean.rain.d2H.ad<-as.numeric()
+sd.rain.d2H.ad<-as.numeric()
 
-## extract mean hydrogen isotope values and sd from that distribution
+rain.d2H.juv<-as.numeric(na.omit(terra::values(WOCO.isoscapeJuv)[,1]))
+rain.d2H.juv<-rain.d2H.juv[rain.d2H.juv!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+mean.rain.d2H.juv<-mean(rain.d2H.juv, na.rm=T)
+sd.rain.d2H.juv<-sd(rain.d2H.juv, na.rm=T)
 
-mean.rain.d2H<-as.numeric()
-sd.rain.d2H<-as.numeric()
-yearlist<-c(2013,2014,2015,2016,2017)
-
-
-for (y in sort(unique(UNK_WC$Year))){
-  
-  rain.d2H<-as.numeric(na.omit(terra::values(isoscapes.orig[[match(y,yearlist)]])[,1]))
-  rain.d2H<-rain.d2H[rain.d2H!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
-  mean.rain.d2H[match(y,yearlist)]<-mean(rain.d2H, na.rm=T)
-  sd.rain.d2H[match(y,yearlist)]<-sd(rain.d2H, na.rm=T)
-  
-}
-
-
+rain.d2H.ad<-as.numeric(na.omit(terra::values(WOCO.isoscapeAD)[,1]))
+rain.d2H.ad<-rain.d2H.ad[rain.d2H.ad!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+mean.rain.d2H.ad<-mean(rain.d2H.ad, na.rm=T)
+sd.rain.d2H.ad<-sd(rain.d2H.ad, na.rm=T)
 
 
 
@@ -432,35 +375,23 @@ woco.unk.sf <- woco.unk.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
   #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
-  filter(!is.na(d2h_MA))
+  filter(!is.na(d2h_local_predicted))
 
 woco.sf <- woco.sf %>%
   filter(!is.na(AGE)) %>%
   filter(!is.na(dH)) %>%
-  filter(!is.na(d2h_MA))
+  filter(!is.na(d2h_predicted))
 
 table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 
 
-rm(isoscapes, globcover,forest.mat, isoscapes.orig,WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
-   WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17,WOCO.isoscape18,ElevEurope,ElevEurope02,ElevEurope03,ElevEurope05,ElevEurope07,ElevEurope08,ElevEurope09,ElevEurope10,ElevEurope13,ElevEurope14,ElevEurope15,ElevEurope16,ElevEurope17,ElevEurope18,      
-EuropeFit02,EuropeFit03,EuropeFit05,EuropeFit07,EuropeFit08,EuropeFit09,EuropeFit10,EuropeFit13,EuropeFit14,EuropeFit15,EuropeFit16,EuropeFit17,EuropeFit18,EuropeIsoscape02,EuropeIsoscape03,EuropeIsoscape05,EuropeIsoscape07,EuropeIsoscape08,EuropeIsoscape09,
-EuropeIsoscape10,EuropeIsoscape13,EuropeIsoscape14,EuropeIsoscape15,EuropeIsoscape16,EuropeIsoscape17,EuropeIsoscape18)
+rm(bbox,dem,demAD,demJuv,ele.mat,      
+   ElevEuropeAD,ElevEuropeJuv,EUR,EuropeFitAD,EuropeFitJuv,EuropeIsoscapeAD,
+   EuropeIsoscapeJuv,forest.mat,globcover,globcoverAD,globcoverJuv,
+   woco.countries,WOCO.isoscapeAD,WOCO.isoscapeJuv)
 gc()
 
-save.image("data/woco.input.data.annual.RData")
-
-
-
-
-## 8.2. remove non-SUI calibration data and create reduced input data ----
-
-woco.sf <- woco.sf %>%
-  filter(nchar(KANTON)==2) 
-dim(woco.sf)
-save.image("data/woco.reduced.input.data.annual.RData")
-
-
+save.image("data/woco.input.data.simple.RData")
 
 
 
