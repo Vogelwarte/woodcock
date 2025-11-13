@@ -57,6 +57,7 @@ UNK_WC<-woco %>% dplyr::filter(ORIGINE=="UNBEKANNT") %>%
   dplyr::filter(!is.na(DATE)) %>%
   dplyr::filter(!is.na(dH)) %>%
   mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
+  mutate(ADULTE=ifelse(is.na(AGE),0,1)) %>%
   dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
   rename(DATE=Date)
 UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
@@ -163,7 +164,7 @@ vardH<-ORIG_WC %>% group_by(lat,long,elev) %>%
 ORIG_WC<-ORIG_WC %>%
   left_join(vardH, by=c('lat','long','elev')) %>%
   mutate(var_source_value=ifelse(is.na(var_source_value),max(vardH$var_source_value,na.rm=T),var_source_value)) %>%
-  mutate(n_source_value=ifelse(n_source_value<5,5,n_source_value)) %>%
+  mutate(n_source_value=ifelse(n_source_value<3,3,n_source_value)) %>%
   ungroup() %>%
   group_by(source_ID, lat, long, elev)
 
@@ -217,27 +218,38 @@ plot(EuropeIsoscapeAD)
 plot(EuropeIsoscapeJuv)
 
 
-# 6. EXTRACTING ISOTOPE DISTRIBUTIONS FROM SAMPLED FEATHERS ---------------------
 
+
+
+# 5. EXTRACTING ISOTOPE DISTRIBUTIONS FROM SAMPLED FEATHERS ---------------------
+
+
+## 5.1. known origin birds to assess model fit ------
 woco.vect<-terra::vect(woco.sf)
-
-woco.sf$d2h_predicted<-terra::extract(EuropeIsoscape$isoscapes,woco.vect)$mean
-
+woco.sf$d2h_predicted[woco.sf$ADULTE==1]<-terra::extract(EuropeIsoscapeAD$isoscapes,woco.vect[woco.vect$ADULTE==1])$mean
+woco.sf$d2h_predicted[woco.sf$ADULTE==0]<-terra::extract(EuropeIsoscapeJuv$isoscapes,woco.vect[woco.vect$ADULTE==0])$mean
 plot(woco.sf$dH~woco.sf$d2h_predicted)
-
-
-woco.unk.sf$d2h_local_predicted<-terra::extract(EuropeIsoscape$isoscapes,woco.unk.vect)$mean
-woco.unk.sf$d2h_local_sd<-sqrt(terra::extract(EuropeIsoscape$isoscapes,woco.unk.vect)$mean_residVar)
-plot(woco.unk.sf$dH~woco.unk.sf$d2h_local_predicted)
+summary(lm(woco.sf$dH~woco.sf$d2h_predicted))
 
 
 
-## 6.4. load shapefile of Switzerland and EUROPE -------
-## OPTION TO CURTAIL TO FOREST AREAS - but only needed for blind assignment
+## 5.2. unknown origin birds to specify LOCAL feather isotope value and SD ------
+woco.unk.vect<-terra::vect(woco.unk.sf)
+woco.unk.sf$d2h_local_predicted[woco.unk.sf$ADULTE==1]<-terra::extract(EuropeIsoscapeAD$isoscapes,woco.unk.vect[woco.unk.vect$ADULTE==1])$mean
+woco.unk.sf$d2h_local_sd[woco.unk.sf$ADULTE==1]<-sqrt(terra::extract(EuropeIsoscapeAD$isoscapes,woco.unk.vect[woco.unk.vect$ADULTE==1])$mean_residVar)
 
-SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
-  st_transform(st_crs('EPSG:4326')) # Project to WGS84
-plot(SUI)
+woco.unk.sf$d2h_local_predicted[woco.unk.sf$ADULTE==0]<-terra::extract(EuropeIsoscapeJuv$isoscapes,woco.unk.vect[woco.unk.vect$ADULTE==0])$mean
+woco.unk.sf$d2h_local_sd[woco.unk.sf$ADULTE==0]<-sqrt(terra::extract(EuropeIsoscapeJuv$isoscapes,woco.unk.vect[woco.unk.vect$ADULTE==0])$mean_residVar)
+
+### check differences
+hist((woco.unk.sf$d2h_local_predicted-woco.unk.sf$dH))
+
+
+
+
+# 6. CREATING FEATHER ISOTOPE DISTRIBUTION FROM POTENTIAL ORIGIN AREAS ------------------
+
+## 6.1. load shapefile of EUROPE -------
 
 bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
 EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
@@ -248,15 +260,15 @@ plot(EUR)
 
 
 
-### 6.4.1. curtail woodcock distribution to potential origin countries INCLUDING UK AND SWITZERLAND FOR CALIBRATION
+## 6.2. specify potential origin countries OUTSIDE OF SWITZERLAND -------------
 woco.countries <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
-                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium", "Switzerland","France","United Kingdom","Spain","Italy"))
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
 
 
 
 
-## 6.5. curtail woodcock distribution to forest and elevation <2000 m ---------------
+## 6.3. curtail woodcock distribution to forest and elevation <2000 m ---------------
 
 ## create conversion matrices
 forest.mat<-matrix(0, nrow=3, ncol=3)
@@ -271,12 +283,11 @@ ele.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
 
 
 ## create elevation raster layer - unnecessary to read in new because ElevEurope already created above
-# dem0<-terra::rast("data/eurodem.tif")
 dem<-ElevEurope %>%
   terra::project(.,crs(woco.countries)) %>%
   terra::crop(woco.countries) %>%
   terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(EuropeIsoscape02$isoscapes))
+  terra::project(.,crs(EuropeIsoscapeJuv$isoscapes))
 crs(dem)
 summary(dem)
 plot(dem)
@@ -286,39 +297,20 @@ plot(dem)
 globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
   terra::crop(woco.countries) %>%
   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(EuropeIsoscape02$isoscapes))
+  terra::project(.,crs(EuropeIsoscapeJuv$isoscapes))
 crs(globcover)
 summary(globcover)
 plot(globcover)
 
 
-## check whether crs is the same
-# crs(globcover)==crs(EuropeIsoscape02$isoscapes)
-# origin(globcover)
-# origin(EuropeIsoscape02$isoscapes)
-# origin(dem)
-# 
-# ## align extent
-# globcover <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-# dem <- terra::resample(ElevEurope, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-# 
-# 
-# ext(EuropeIsoscape05$isoscapes)
-# ext(globcover)
-# ext(dem)
-# 
-# 
-# res(EuropeIsoscape05$isoscapes)
-# res(globcover)
-# res(dem)
-# 
-# compareGeom(EuropeIsoscape02$isoscapes, globcover, dem, stopOnError = FALSE)
+## align extent
+
 
 
 ## REMOVE NON-FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
 # DO NOT USE terra::crop here because it will change the extent of the raster and the multiplication will fail
 
-globcover02 <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+globcoverAD <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
 dem02 <- terra::resample(dem, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
 WOCO.isoscape02 <- (EuropeIsoscape02$isoscapes %>%
   terra::mask(woco.countries))*globcover02*dem02
