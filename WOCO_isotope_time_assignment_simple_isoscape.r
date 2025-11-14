@@ -300,6 +300,21 @@ mean.p.nonlocal %>%
 
 # 5. SPECIFY SIMPLE PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
 
+# uncertainty explodes when you move from a single global prior on p to individual priors p[i] inside the loop is due to how hierarchical structure and parameterization affect identifiability and shrinkage.
+# 
+# When you use one global p:
+#   
+#   All birds share the same prior probability of being local.
+# The model pools information across individuals → strong shrinkage → posterior uncertainty is reduced.
+# 
+# 
+# When you switch to p[i] for each bird:
+#   
+#   Each bird now has its own Bernoulli probability parameter.
+# You’ve introduced 800 extra parameters with only one observation each.
+# There is almost no data to inform π[i] beyond its prior, so the posterior for each π[i] remains close to the prior (Beta(1,1) = uniform).
+# Result: extreme uncertainty (posterior ranges 0–1) because the model cannot learn much about π[i] from a single observation.
+
 
 woco.orig.simple<-nimbleCode({
   
@@ -389,31 +404,36 @@ out.ctn
 
 
 
-# 6. SPECIFY SIMPLE PROBABILITY MODEL WITH PROBABILITY DENSITY FUNCTION ----------------------------------------------
 
 
-woco.orig.simple<-nimbleCode({
+
+# 6. SPECIFY DETERMINISTIC ASSIGNMENT MODEL WITH BAYES FACTOR  ----------------------------------------------
+
+
+woco.orig.bf<-nimbleCode({
   
+  
+  for (i in 1:nind.unkn){
   # Parameters:
-  # p.local: probability of local origin (that shot woodcock was a local bird) - varies by individual
+  # p.nonlocal: probability of nonlocal origin (that shot woodcock was a local bird) - varies by individual
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
-  for (i in 1:nind.unkn){
-    
-    p.local[i] ~ dunif(0, 1)  ## completely uninformative prior
+        # Potential local distribution based on timing used as prior (from WOCO_migration_model.R - could be integrated into this model)
+        logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
+          b.mig.week*(unk.week[i])     ### week effect from migration model
+        p.local.prior1[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from migration model
+        p.local.prior[i] <- max((1-p.local.prior1[i]),p.local.prior2[i])  ## combining priors by taking the maximum (once birds have migrated the highest prob will do)
 
     # Compute densities
     local_density[i] <- dnorm(d2H_feather.unknown[i], mean = d2H_feather.local[i], sd = d2H_feather.local.sd[i])
     global_density[i] <- dnorm(d2H_feather.unknown[i], mean = mean.feather.d2H[age[i]+1], sd = sd.feather.d2H[age[i]+1])
     
     # Posterior probability using Bayes formula
-    posterior[i] <- (p.local[i] * local_density[i]) / 
-      (p.local[i] * local_density[i] + (1 - p.local[i]) * global_density[i])
-    
-    
+    p.local[i] <- (p.local.prior[i] * local_density[i]) / 
+      (p.local.prior[i] * local_density[i] + (1-p.local.prior[i]) * global_density[i])
     
   } #i
   
@@ -421,63 +441,73 @@ woco.orig.simple<-nimbleCode({
 }) ## end of nimble code chunk
 
 
-iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
-                      mean.feather.d2H = c(mean.rain.d2H.ad,mean.rain.d2H.juv),
-                      sd.feather.d2H = c(sd.rain.d2H.ad,sd.rain.d2H.juv),
-                      d2H_feather.local=woco.unk.sf$d2h_local_predicted,
-                      d2H_feather.local.sd=woco.unk.sf$d2h_local_sd,
-                      age = ifelse(woco.unk.sf$AGE=="Adulte",0,1))   ## migration weeks start only in August
+    iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
+                          mean.feather.d2H = c(mean.rain.d2H.ad,mean.rain.d2H.juv),
+                          sd.feather.d2H = c(sd.rain.d2H.ad,sd.rain.d2H.juv),
+                          d2H_feather.local=woco.unk.sf$d2h_local_predicted,
+                          d2H_feather.local.sd=woco.unk.sf$d2h_local_sd,
+                          age = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
+                          p.local.prior2 = (1-woco.unk.sf$abd_prior),
+                          lm.mean.mig=logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[1,1])),
+                          b.mig.week=as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[2,1]),
+                          unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
+    )
+    
+    iso.data <- list(d2H_feather.unknown = woco.unk.sf$dH)
 
-iso.data <- list(d2H_feather.unknown = woco.unk.sf$dH)
-parameters.iso <- c("p.local") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
-iso.inits <- list(z = ifelse(woco.unk.sf$dH < woco.unk.sf$d2h_local_predicted,0,1),
-                  p.local = 1-woco.unk.sf$abd_prior # initial start value will be replaced after test run
-)
+    parameters.iso <- c("p.local") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
+    
+    # Initial values  FOR ALL PARAMETERS
+    ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
+    
+    iso.inits <- list(p.local = (1-woco.unk.sf$abd_prior)) # initial start value will be replaced after test run
 
-## explore whether precise assignment was possible if variation wasn't so large
-iso.constants$sd.feather.d2H<-iso.constants$sd.feather.d2H*0.1
-iso.constants$d2H_feather.local.sd<-iso.constants$d2H_feather.local.sd*0.1
-iso.data$d2H_feather.unknown<-iso.constants$mean.feather.d2H[iso.constants$age+1]
-
-
-woco.iso.simple <- nimbleMCMC(code = woco.orig.simple,
-                              constants=iso.constants,
-                              data = iso.data,
-                              inits = iso.inits,
-                              monitors = parameters.iso,
-                              thin=5,
-                              niter = n.iter,
-                              nburnin = n.burnin,
-                              nchains = n.chains,
-                              progressBar = getNimbleOption("MCMCprogressBar"),
-                              summary=T)
-
-# compile all the samples
-samples <- rbind(woco.iso.simple$samples$chain1,woco.iso.simple$samples$chain2,woco.iso.simple$samples$chain3,woco.iso.simple$samples$chain4)
-mean.p.local <- as_tibble(samples[,grep("p.local\\[", colnames(samples))]) %>%
-  gather(key="parameter",value="p.local") %>%
-  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
-  mutate(age=iso.constants$age[ind]) %>%
-  mutate(ctn=woco.unk.sf$KANTON[ind])
-
-
-# summarise by Canton
-
-out.ctn<- mean.p.local %>%
-  group_by(age,ctn) %>%
-  summarise(foreign.med=median(p.local),foreign.lcl=quantile(p.local,0.025), foreign.ucl=quantile(p.local,0.975)) %>%
-  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  ungroup() %>%
-  select(-age) %>%
-  mutate(prior="combined abundance and migration")
-out.ctn
+    ## explore whether precise assignment was possible if variation wasn't so large
+    #iso.constants$d2H_feather.local<-iso.constants$d2H_feather.local+50
+    iso.constants$sd.feather.d2H<-iso.constants$sd.feather.d2H*0.1
+    iso.constants$d2H_feather.local.sd<-iso.constants$d2H_feather.local.sd*0.1
+    #iso.data$d2H_feather.unknown<-iso.constants$mean.feather.d2H[iso.constants$age+1]
+    
+    
+    woco.iso <- nimbleMCMC(code = woco.orig.bf,
+                           constants=iso.constants,
+                           data = iso.data,
+                           inits = iso.inits,
+                           monitors = parameters.iso,
+                           thin=5,
+                           niter = n.iter,
+                           nburnin = n.burnin,
+                           nchains = n.chains,
+                           progressBar = getNimbleOption("MCMCprogressBar"),
+                           summary=T)
+    
+    
+    
+    
+    
+    # compile all the samples
+    samples <- rbind(woco.iso$samples$chain1,woco.iso$samples$chain2,woco.iso$samples$chain3,woco.iso$samples$chain4)
+    mean.p.local <- as_tibble(samples[,grep("p.local\\[", colnames(samples))]) %>%
+      gather(key="parameter",value="p.local") %>%
+      mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+      mutate(age=iso.constants$age[ind]) %>%
+      mutate(ctn=woco.unk.sf$KANTON[ind]) 
+    
+    out.ctn<- mean.p.local %>%
+      group_by(age,ctn) %>%
+      summarise(foreign.med=median(p.local),foreign.lcl=quantile(p.local,0.025), foreign.ucl=quantile(p.local,0.975)) %>%
+      mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+      ungroup() %>%
+      select(-age) %>%
+      mutate(prior="combined abundance and migration")
+    out.ctn
 
 ggplot(data=out.ctn,aes(x=ctn, y=foreign.med))+
   geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=foreign.lcl, ymax=foreign.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
   
   ## format axis ticks
-  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
+  labs(y="Proportion of shot woodcocks of local origin",x="Swiss Canton",col="") +
   scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
   
   ## beautification of the axes
@@ -497,10 +527,108 @@ ggplot(data=out.ctn,aes(x=ctn, y=foreign.med))+
 
 
 
-# 6. CALCULATE PROBABILITY IN R FROM LOCAL DISTRIBUTION ONLY
+# 7. CALCULATE LOCAL PROBABILITY IN R FROM LOCAL DISTRIBUTION ONLY ------------------------
 
-probs <- dnorm(woco.unk.sf$dH, mean = woco.unk.sf$d2h_local_predicted, sd = woco.unk.sf$d2h_local_sd)
+local_density <- dnorm(woco.unk.sf$dH, mean = woco.unk.sf$d2h_local_predicted, sd = woco.unk.sf$d2h_local_sd)
+global_density.ad <- dnorm(woco.unk.sf$dH[woco.unk.sf$AGE=="Adulte"], mean = mean.rain.d2H.ad, sd = sd.rain.d2H.ad)
+global_density.juv <- dnorm(woco.unk.sf$dH[woco.unk.sf$AGE=="Adulte"], mean = mean.rain.d2H.juv, sd = sd.rain.d2H.juv)
+global.density<-c(global_density.ad,global_density.juv)
 
-local_density <- dnorm(X, mean = mu, sd = sd)
-global_density <- dnorm(X, mean = mu_global, sd = sd_global)
-posterior <- local_density / (local_density + global_density)
+# Posterior probability using Bayes formula
+p.local.naive <- local_density / (local_density + global_density)
+p.local <- ((1-woco.unk.sf$abd_prior) * local_density) / 
+  ((1-woco.unk.sf$abd_prior) * local_density + woco.unk.sf$abd_prior * global_density)
+
+hist(p.local.naive)
+
+out.ctn<-as_tibble(p.local.naive) %>%
+  rename(p.local=value) %>%
+  mutate(age=iso.constants$age) %>%
+  mutate(ctn=woco.unk.sf$KANTON) %>%
+  group_by(age,ctn) %>%
+  summarise(local.med=median(p.local),local.lcl=quantile(p.local,0.025), local.ucl=quantile(p.local,0.975)) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  ungroup() %>%
+  select(-age) %>%
+  mutate(prior="combined abundance and migration")
+out.ctn
+
+ggplot(data=out.ctn,aes(x=ctn, y=local.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=local.lcl, ymax=local.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  
+  ## format axis ticks
+  labs(y="Proportion of shot woodcocks of local origin",x="Swiss Canton",col="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.90,0.85))
+
+
+
+
+# 8. SIMULATE LOCAL PROBABILITY IN R WHEN UNCERTAINTY IS MUCH REDUCED ------------------------
+
+local_density <- dnorm(woco.unk.sf$dH, mean = woco.unk.sf$d2h_local_predicted, sd = woco.unk.sf$d2h_local_sd)
+global_density.ad <- dnorm(woco.unk.sf$dH[woco.unk.sf$AGE=="Adulte"], mean = mean.rain.d2H.ad, sd = sd.rain.d2H.ad*0.1)
+global_density.juv <- dnorm(woco.unk.sf$dH[woco.unk.sf$AGE=="Adulte"], mean = mean.rain.d2H.juv, sd = sd.rain.d2H.juv*0.1)
+global.density<-c(global_density.ad,global_density.juv)
+
+# Posterior probability using Bayes formula
+p.local.mig.prior<-plogis(logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[1,1])) +
+                          as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[2,1])*(week(UNK_WC$DATE)-week(ymd("2024-07-26"))))    ### week effect from migration model
+p.local.naive <- local_density / (local_density + global_density)
+p.local.abd <- ((1-woco.unk.sf$abd_prior) * local_density) / 
+  ((1-woco.unk.sf$abd_prior) * local_density + woco.unk.sf$abd_prior * global_density)
+p.local.mig <- ((1-p.local.mig.prior) * local_density) / 
+  ((1-p.local.mig.prior) * local_density + p.local.mig.prior * global_density)
+
+hist(p.local.naive)
+hist(p.local.abd)
+hist(p.local.mig)
+
+
+out.ctn<-as_tibble(p.local) %>%
+  rename(p.local=value) %>%
+  mutate(age=iso.constants$age) %>%
+  mutate(ctn=woco.unk.sf$KANTON) %>%
+  group_by(age,ctn) %>%
+  summarise(n=length(p.local),local.med=median(p.local),local.lcl=quantile(p.local,0.025), local.ucl=quantile(p.local,0.975)) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  ungroup() %>%
+  select(-age) %>%
+  mutate(prior="combined abundance and migration")
+out.ctn
+
+ggplot(data=out.ctn,aes(x=ctn, y=local.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=local.lcl, ymax=local.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  
+  ## format axis ticks
+  labs(y="Proportion of shot woodcocks of local origin",x="Swiss Canton",col="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.90,0.85))
