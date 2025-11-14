@@ -599,7 +599,7 @@ hist(p.local.abd)
 hist(p.local.mig)
 
 
-out.ctn<-as_tibble(p.local) %>%
+out.ctn<-as_tibble(p.local.abd) %>%
   rename(p.local=value) %>%
   mutate(age=iso.constants$age) %>%
   mutate(ctn=woco.unk.sf$KANTON) %>%
