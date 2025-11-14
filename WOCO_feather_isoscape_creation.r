@@ -164,15 +164,9 @@ vardH<-ORIG_WC %>% group_by(lat,long,elev) %>%
 ORIG_WC<-ORIG_WC %>%
   left_join(vardH, by=c('lat','long','elev')) %>%
   mutate(var_source_value=ifelse(is.na(var_source_value),max(vardH$var_source_value,na.rm=T),var_source_value)) %>%
-  mutate(n_source_value=ifelse(n_source_value<3,3,n_source_value)) %>%
+  mutate(n_source_value=ifelse(n_source_value<2,2,n_source_value)) %>%  ## spaMM does not run if n_source_value=1
   ungroup() %>%
   group_by(source_ID, lat, long, elev)
-
-# ORIG_WC_agg<-ORIG_WC %>%
-#   group_by(lat,long,elev) %>%
-#   summarise(source_ID=first(source_ID), mean_source_value=mean(source_value),var_source_value=var(source_value), n_source_value=length(source_value)) %>%
-#   mutate(var_source_value=ifelse(is.na(var_source_value),max(vardH$var_source_value,na.rm=T),var_source_value)) %>%
-#   mutate(n_source_value=ifelse(n_source_value<5,5,n_source_value))
 
 
 which(is.na(ORIG_WC)==TRUE)
@@ -188,6 +182,10 @@ EuropeFitAD <- isofit(data = ORIG_WC[ORIG_WC$age==1,],
 
 EuropeFitJuv <- isofit(data = ORIG_WC[ORIG_WC$age==0,],
                     mean_model_fix = list(elev = TRUE, lat_abs = TRUE, long_abs=TRUE))
+
+
+plot(EuropeFitAD)
+plot(EuropeFitJuv)
 
 
 
@@ -216,8 +214,8 @@ EuropeIsoscapeJuv <- isoscape(raster = ElevEuropeJuv,
 
 plot(EuropeIsoscapeAD)
 plot(EuropeIsoscapeJuv)
-
-
+plot(EuropeIsoscapeAD, which = "mean_residVar")
+plot(EuropeIsoscapeJuv, which = "mean_residVar")
 
 
 
@@ -320,29 +318,61 @@ WOCO.isoscapeJuv <- (EuropeIsoscapeJuv$isoscapes %>%
 
 saveRDS(WOCO.isoscapeAD,"./data/isoscapeAD.rds")
 saveRDS(WOCO.isoscapeJuv,"./data/isoscapeJuv.rds")
-
-
+# WOCO.isoscapeAD<-readRDS("./data/isoscapeAD.rds")
+# WOCO.isoscapeJuv<-readRDS("./data/isoscapeJuv.rds")
 
 
 
 ## 6.4. extract hydrogen isotope values from that distribution for each age group -------
 
 
+
+
+
+
+
+### 6.4.1. Juveniles -----
 mean.rain.d2H.juv<-as.numeric()
 sd.rain.d2H.juv<-as.numeric()
-
-mean.rain.d2H.ad<-as.numeric()
-sd.rain.d2H.ad<-as.numeric()
-
 rain.d2H.juv<-as.numeric(na.omit(terra::values(WOCO.isoscapeJuv)[,1]))
 rain.d2H.juv<-rain.d2H.juv[rain.d2H.juv!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
 mean.rain.d2H.juv<-mean(rain.d2H.juv, na.rm=T)
-sd.rain.d2H.juv<-sd(rain.d2H.juv, na.rm=T)
 
+## calculating pooled variance as sum of sample and other variance: https://stats.stackexchange.com/questions/604824/how-can-i-average-the-variance-extracted-from-different-group-of-samples
+# Sample variance of predictions:
+sample_var.juv <- as.numeric(na.omit(terra::values(WOCO.isoscapeJuv)[,3]))
+sample_var.juv <-sample_var.juv[sample_var.juv!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+
+# Mean of individual variances:
+mean_var.juv <- mean(sample_var.juv, na.rm=T)
+
+# Total variance:
+total_var.juv <- var(rain.d2H.juv, na.rm=T) + mean_var.juv
+sd.rain.d2H.juv<-sqrt(total_var.juv)
+
+
+### 6.4.2. Adults  -----
+mean.rain.d2H.ad<-as.numeric()
+sd.rain.d2H.ad<-as.numeric()
 rain.d2H.ad<-as.numeric(na.omit(terra::values(WOCO.isoscapeAD)[,1]))
 rain.d2H.ad<-rain.d2H.ad[rain.d2H.ad!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
 mean.rain.d2H.ad<-mean(rain.d2H.ad, na.rm=T)
-sd.rain.d2H.ad<-sd(rain.d2H.ad, na.rm=T)
+
+
+## calculating pooled variance as sum of sample and other variance: https://stats.stackexchange.com/questions/604824/how-can-i-average-the-variance-extracted-from-different-group-of-samples
+# Sample variance of predictions:
+sample_var.ad <- as.numeric(na.omit(terra::values(WOCO.isoscapeAD)[,3]))
+sample_var.ad <-sample_var.ad[sample_var.ad!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+
+# Mean of individual variances:
+mean_var.ad <- mean(sample_var.ad, na.rm=T)
+
+# Total variance:
+total_var.ad <- var(rain.d2H.ad, na.rm=T) + mean_var.ad
+sd.rain.d2H.ad<-sqrt(total_var.ad)
+
+
+
 
 
 
