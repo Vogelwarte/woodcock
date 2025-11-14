@@ -323,12 +323,7 @@ saveRDS(WOCO.isoscapeJuv,"./data/isoscapeJuv.rds")
 
 
 
-## 6.4. extract hydrogen isotope values from that distribution for each age group -------
-
-
-
-
-
+## 6.4. specify hydrogen isotope mean and sd from that distribution for each age group across Europe -------
 
 
 ### 6.4.1. Juveniles -----
