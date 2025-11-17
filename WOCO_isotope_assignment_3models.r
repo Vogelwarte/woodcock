@@ -43,7 +43,7 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 # prepared in WOCO_rainfall_isoscape_creation.r
 load("data/woco.input.data.annual.RData")
 #load("data/woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
-try(rm(isoscape, globcover), silent=T)
+# try(rm(isoscape, globcover), silent=T)
 # ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
 ## 1.1. modify data to include abundance predictions from Ornitho.ch records ----------
@@ -51,7 +51,7 @@ try(rm(isoscape, globcover), silent=T)
 
 woco.unk.abd.prior <- woco.unk.sf %>%
   st_drop_geometry() %>%
-  mutate(DAY=yday(DATE), DAY_2=(yday(DATE)^2))
+  mutate(DAY=yday(feather_sampling_date), DAY_2=(yday(feather_sampling_date)^2))
 
 woco_abundance <- woco_abundance %>%
   mutate(DAY=yday(Date), DAY_2=(yday(Date)^2)) %>%
@@ -69,7 +69,7 @@ hist(woco.unk.sf$abd_prior)
 ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
   geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
   geom_smooth(method=loess, se=T) +
-  geom_line(data=woco.unk.sf, aes(x=yday(DATE),y=abd_prior), col="firebrick")
+  geom_line(data=woco.unk.sf, aes(x=yday(feather_sampling_date),y=abd_prior), col="firebrick")
 
 
 
@@ -92,7 +92,7 @@ woco.t.abd.model<-nimbleCode({
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Likelihood:  
   for (i in 1:nind.known){
-        d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib)
+        d2H_feather.known[i] ~ dnorm(mu.known[i], sd=d2H_rain.known.sd[i])
         mu.known[i] <- int.rain + b.age*age.known[i] + b.rain*d2H_rain.known[i]
       }
     
@@ -113,20 +113,7 @@ woco.t.abd.model<-nimbleCode({
     logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
       b.mig.week*(unk.week[i])     ### week effect from migration model
     p.nonlocal.prior1[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from migration model
-    
-    # # combine the probabilities of migration and abundance into a single probability using log odds
-    # # Convert each probability to odds:
-    # odds_mig[i] <- p.nonlocal.prior1[i] / (1 - p.nonlocal.prior1[i])
-    # odds_abd[i] <- p.nonlocal.prior2[i]  / (1 - p.nonlocal.prior2[i])  ## this prior is specified in the data based on count data series
-    # 
-    # # combine odds
-    # combined_odds[i] <- max(1e-6, min(1e6, odds_mig[i] * odds_abd[i]))  ## with safeguard to avoid values <0
-    # 
-    # # convert odds ratio back to probability
-    # p.nonlocal.prior[i] <- combined_odds[i] / (1 + combined_odds[i])  ## Option 1: combining priors with odds-ratios
-    # p.nonlocal.prior[i] <- (p.nonlocal.prior1[i] + p.nonlocal.prior2[i])/2  ## Option 2: combining priors by taking the mean
     p.nonlocal.prior[i] <- max(p.nonlocal.prior1[i],p.nonlocal.prior2[i])  ## Option 3: combining priors by taking the minimum (once birds have migrated the lowest prob will do)
-    # p.nonlocal.prior[i] <- p.nonlocal.prior1[i]  ## Option 4: ignore abundance prior
     
     # Latent indicator for isotope distribution based on beta distribution of shooting time prior
     alpha[i] <- max(1e-3, p.nonlocal.prior[i] * dispersion)   ## with safeguard to avoid values <0
@@ -172,12 +159,12 @@ table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       nind.known = dim(woco.sf)[1],
-                      mean.rain.d2H.Europe = mean.rain.d2H,
-                      sd.rain.d2H.Europe = sd.rain.d2H,
-                      sd.rain.d2H.local = sd.rain.d2H,
-                      d2H_rain.known=woco.sf$d2h_MA,
+                      mean.rain.d2H.Europe = mean.rain.d2H.Europe,
                       mean.rain.d2H.local=woco.unk.sf$d2h_MA,
-                      d2H_rain.unknown=woco.unk.sf$d2h_MA,
+                      sd.rain.d2H.Europe = sd.rain.d2H.Europe,
+                      sd.rain.d2H.local = sqrt(woco.unk.sf$d2h_se_MA),  ## given as variance in data frame, needs to be sqrt for sd
+                      d2H_rain.known=woco.sf$d2h_MA,
+                      d2H_rain.known.sd=sqrt(woco.sf$d2h_se_MA),   ## given as variance in data frame, needs to be sqrt for sd
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
                       p.nonlocal.prior2 = woco.unk.sf$abd_prior,
@@ -188,7 +175,7 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       # b.mig.week=MCMCsummary(readRDS("output/woco_mig_depart_output_nimble.rds"))[1,1],  ## became necessary after switching to stepwise run which produces different output than nimbleMCMC
                       lm.mean.mig=logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[1,1])),
                       b.mig.week=as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[2,1]),
-                      unk.week=week(UNK_WC$DATE)-week(ymd("2024-07-26"))   ## migration weeks start only in August
+                      unk.week=week(UNK_WC$feather_sampling_date)-week(ymd("2024-07-26"))   ## migration weeks start only in August
                       )
 
 iso.data <- list(d2H_feather.known = woco.sf$dH,
@@ -223,7 +210,7 @@ n.chains <- 4
 
 
 ## 3.3. PRELIMINARY TEST OF NIMBLE MODEL TO IDENTIFY PROBLEMS --------------------
-test <- nimbleModel(code = woco.orig.model,
+test <- nimbleModel(code = woco.t.abd.model,
                     constants=iso.constants,
                     data = iso.data,
                     inits = iso.inits,
@@ -249,7 +236,7 @@ iso.inits$p.nonlocal<-test$p.nonlocal.prior
 ### this takes 600 sec for 100000 iterations and converges in that time
 tic()
 
-woco.iso <- nimbleMCMC(code = woco.orig.model,
+woco.iso <- nimbleMCMC(code = woco.t.abd.model,
                         constants=iso.constants,
                         data = iso.data,
                         inits = iso.inits,,
