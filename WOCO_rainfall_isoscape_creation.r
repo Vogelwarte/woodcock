@@ -167,46 +167,46 @@ ElevEurope18 <- prepraster(raster = ElevEurope,
 
 
 # 4. BUILDING ANNUAL ISOSCAPES ----------------
+## commented out as it takes a few hours (~15 min per isoscape)
 
-
-EuropeIsoscape02 <- isoscape(raster = ElevEurope02,
-                             isofit = EuropeFit02)
-
-EuropeIsoscape03 <- isoscape(raster = ElevEurope03,
-                             isofit = EuropeFit03)
-
-EuropeIsoscape05 <- isoscape(raster = ElevEurope05,
-                             isofit = EuropeFit05)
-
-EuropeIsoscape07 <- isoscape(raster = ElevEurope07,
-                             isofit = EuropeFit07)
-
-EuropeIsoscape08 <- isoscape(raster = ElevEurope08,
-                             isofit = EuropeFit08)
-
-EuropeIsoscape09 <- isoscape(raster = ElevEurope09,
-                             isofit = EuropeFit09)
-
-EuropeIsoscape10 <- isoscape(raster = ElevEurope10,
-                             isofit = EuropeFit10)
-
-EuropeIsoscape13 <- isoscape(raster = ElevEurope13,
-                             isofit = EuropeFit13)
-
-EuropeIsoscape14 <- isoscape(raster = ElevEurope14,
-                             isofit = EuropeFit14)
-
-EuropeIsoscape15 <- isoscape(raster = ElevEurope15,
-                             isofit = EuropeFit15)
-
-EuropeIsoscape16 <- isoscape(raster = ElevEurope16,
-                             isofit = EuropeFit16)
-
-EuropeIsoscape17 <- isoscape(raster = ElevEurope17,
-                           isofit = EuropeFit17)
-
-EuropeIsoscape18 <- isoscape(raster = ElevEurope18,
-                             isofit = EuropeFit18)
+# EuropeIsoscape02 <- isoscape(raster = ElevEurope02,
+#                              isofit = EuropeFit02)
+# 
+# EuropeIsoscape03 <- isoscape(raster = ElevEurope03,
+#                              isofit = EuropeFit03)
+# 
+# EuropeIsoscape05 <- isoscape(raster = ElevEurope05,
+#                              isofit = EuropeFit05)
+# 
+# EuropeIsoscape07 <- isoscape(raster = ElevEurope07,
+#                              isofit = EuropeFit07)
+# 
+# EuropeIsoscape08 <- isoscape(raster = ElevEurope08,
+#                              isofit = EuropeFit08)
+# 
+# EuropeIsoscape09 <- isoscape(raster = ElevEurope09,
+#                              isofit = EuropeFit09)
+# 
+# EuropeIsoscape10 <- isoscape(raster = ElevEurope10,
+#                              isofit = EuropeFit10)
+# 
+# EuropeIsoscape13 <- isoscape(raster = ElevEurope13,
+#                              isofit = EuropeFit13)
+# 
+# EuropeIsoscape14 <- isoscape(raster = ElevEurope14,
+#                              isofit = EuropeFit14)
+# 
+# EuropeIsoscape15 <- isoscape(raster = ElevEurope15,
+#                              isofit = EuropeFit15)
+# 
+# EuropeIsoscape16 <- isoscape(raster = ElevEurope16,
+#                              isofit = EuropeFit16)
+# 
+# EuropeIsoscape17 <- isoscape(raster = ElevEurope17,
+#                            isofit = EuropeFit17)
+# 
+# EuropeIsoscape18 <- isoscape(raster = ElevEurope18,
+#                              isofit = EuropeFit18)
 
 
 # 5. SAVING / RELOADING ANNUAL ISOSCAPES ----------------
@@ -395,112 +395,126 @@ plot(globcover)
 
 ## REMOVE NON-FOREST AND HIGH ELEVATION FROM EACH ISOSCAPE
 # DO NOT USE terra::crop here because it will change the extent of the raster and the multiplication will fail
+# 
+# globcover02 <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem02 <- terra::resample(dem, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape02 <- (EuropeIsoscape02$isoscapes %>%
+#   terra::mask(woco.countries))*globcover02*dem02
+# rm(globcover02,dem02)
+# gc()
+# 
+# globcover03 <- terra::resample(globcover, EuropeIsoscape03$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem03 <- terra::resample(dem, EuropeIsoscape03$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape03 <- (EuropeIsoscape03$isoscapes %>%
+#                       terra::mask(woco.countries))*globcover03*dem03
+# rm(globcover03,dem03)
+# gc()
+# 
+# globcover05 <- terra::resample(globcover, EuropeIsoscape05$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem05 <- terra::resample(dem, EuropeIsoscape05$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape05 <- (EuropeIsoscape05$isoscapes %>%
+#   terra::mask(woco.countries))*globcover05*dem05
+# rm(globcover05,dem05)
+# gc()
+# 
+# globcover07 <- terra::resample(globcover, EuropeIsoscape07$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem07 <- terra::resample(dem, EuropeIsoscape07$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape07 <- (EuropeIsoscape07$isoscapes %>%
+#   terra::mask(woco.countries))*globcover07*dem07
+# rm(globcover07,dem07)
+# gc()
+# 
+# globcover08 <- terra::resample(globcover, EuropeIsoscape08$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem08 <- terra::resample(dem, EuropeIsoscape08$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape08 <- (EuropeIsoscape08$isoscapes %>%
+#   terra::mask(woco.countries))*globcover08*dem08
+# rm(globcover08,dem08)
+# gc()
+# 
+# globcover09 <- terra::resample(globcover, EuropeIsoscape09$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem09 <- terra::resample(dem, EuropeIsoscape09$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape09 <- (EuropeIsoscape09$isoscapes %>%
+#   terra::mask(woco.countries))*globcover09*dem09
+# rm(globcover09,dem09)
+# gc()
+# 
+# globcover10 <- terra::resample(globcover, EuropeIsoscape10$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem10 <- terra::resample(dem, EuropeIsoscape10$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape10 <- (EuropeIsoscape10$isoscapes %>%
+#   terra::mask(woco.countries))*globcover10*dem10
+# rm(globcover10,dem10)
+# gc()
+# 
+# globcover13 <- terra::resample(globcover, EuropeIsoscape13$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem13 <- terra::resample(dem, EuropeIsoscape13$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
+#   terra::mask(woco.countries))*globcover13*dem13
+# rm(globcover13,dem13)
+# gc()
+# 
+# globcover14 <- terra::resample(globcover, EuropeIsoscape14$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem14 <- terra::resample(dem, EuropeIsoscape14$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
+#   terra::mask(woco.countries))*globcover14*dem14
+# rm(globcover14,dem14)
+# gc()
+# 
+# globcover15 <- terra::resample(globcover, EuropeIsoscape15$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem15 <- terra::resample(dem, EuropeIsoscape15$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
+#   terra::mask(woco.countries))*globcover15*dem15
+# rm(globcover15,dem15)
+# gc()
+# 
+# globcover16 <- terra::resample(globcover, EuropeIsoscape16$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem16 <- terra::resample(dem, EuropeIsoscape16$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
+#   terra::mask(woco.countries))*globcover16*dem16
+# rm(globcover16,dem16)
+# gc()
+# 
+# globcover17 <- terra::resample(globcover, EuropeIsoscape17$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem17 <- terra::resample(dem, EuropeIsoscape17$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
+#   terra::mask(woco.countries))*globcover17*dem17
+# rm(globcover17,dem17)
+# gc()
+# 
+# globcover18 <- terra::resample(globcover, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+# dem18 <- terra::resample(dem, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
+# WOCO.isoscape18 <- (EuropeIsoscape18$isoscapes %>%
+#   terra::mask(woco.countries))*globcover18*dem18
+# rm(globcover18,dem18)
+# gc()
+# 
+# 
+# saveRDS(WOCO.isoscape02,"./data/isoscape02.rds")
+# saveRDS(WOCO.isoscape03,"./data/isoscape03.rds")
+# saveRDS(WOCO.isoscape05,"./data/isoscape05.rds")
+# saveRDS(WOCO.isoscape07,"./data/isoscape07.rds")
+# saveRDS(WOCO.isoscape08,"./data/isoscape08.rds")
+# saveRDS(WOCO.isoscape09,"./data/isoscape09.rds")
+# saveRDS(WOCO.isoscape10,"./data/isoscape10.rds")
+# saveRDS(WOCO.isoscape13,"./data/isoscape13.rds")
+# saveRDS(WOCO.isoscape14,"./data/isoscape14.rds")
+# saveRDS(WOCO.isoscape15,"./data/isoscape15.rds")
+# saveRDS(WOCO.isoscape16,"./data/isoscape16.rds")
+# saveRDS(WOCO.isoscape17,"./data/isoscape17.rds")
+# saveRDS(WOCO.isoscape18,"./data/isoscape18.rds")
 
-globcover02 <- terra::resample(globcover, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-dem02 <- terra::resample(dem, EuropeIsoscape02$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape02 <- (EuropeIsoscape02$isoscapes %>%
-  terra::mask(woco.countries))*globcover02*dem02
-rm(globcover02,dem02)
-gc()
-
-globcover03 <- terra::resample(globcover, EuropeIsoscape03$isoscapes, method = "max")  # or method = "near" for categorical data
-dem03 <- terra::resample(dem, EuropeIsoscape03$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape03 <- (EuropeIsoscape03$isoscapes %>%
-                      terra::mask(woco.countries))*globcover03*dem03
-rm(globcover03,dem03)
-gc()
-
-globcover05 <- terra::resample(globcover, EuropeIsoscape05$isoscapes, method = "max")  # or method = "near" for categorical data
-dem05 <- terra::resample(dem, EuropeIsoscape05$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape05 <- (EuropeIsoscape05$isoscapes %>%
-  terra::mask(woco.countries))*globcover05*dem05
-rm(globcover05,dem05)
-gc()
-
-globcover07 <- terra::resample(globcover, EuropeIsoscape07$isoscapes, method = "max")  # or method = "near" for categorical data
-dem07 <- terra::resample(dem, EuropeIsoscape07$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape07 <- (EuropeIsoscape07$isoscapes %>%
-  terra::mask(woco.countries))*globcover07*dem07
-rm(globcover07,dem07)
-gc()
-
-globcover08 <- terra::resample(globcover, EuropeIsoscape08$isoscapes, method = "max")  # or method = "near" for categorical data
-dem08 <- terra::resample(dem, EuropeIsoscape08$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape08 <- (EuropeIsoscape08$isoscapes %>%
-  terra::mask(woco.countries))*globcover08*dem08
-rm(globcover08,dem08)
-gc()
-
-globcover09 <- terra::resample(globcover, EuropeIsoscape09$isoscapes, method = "max")  # or method = "near" for categorical data
-dem09 <- terra::resample(dem, EuropeIsoscape09$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape09 <- (EuropeIsoscape09$isoscapes %>%
-  terra::mask(woco.countries))*globcover09*dem09
-rm(globcover09,dem09)
-gc()
-
-globcover10 <- terra::resample(globcover, EuropeIsoscape10$isoscapes, method = "max")  # or method = "near" for categorical data
-dem10 <- terra::resample(dem, EuropeIsoscape10$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape10 <- (EuropeIsoscape10$isoscapes %>%
-  terra::mask(woco.countries))*globcover10*dem10
-rm(globcover10,dem10)
-gc()
-
-globcover13 <- terra::resample(globcover, EuropeIsoscape13$isoscapes, method = "max")  # or method = "near" for categorical data
-dem13 <- terra::resample(dem, EuropeIsoscape13$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
-  terra::mask(woco.countries))*globcover13*dem13
-rm(globcover13,dem13)
-gc()
-
-globcover14 <- terra::resample(globcover, EuropeIsoscape14$isoscapes, method = "max")  # or method = "near" for categorical data
-dem14 <- terra::resample(dem, EuropeIsoscape14$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
-  terra::mask(woco.countries))*globcover14*dem14
-rm(globcover14,dem14)
-gc()
-
-globcover15 <- terra::resample(globcover, EuropeIsoscape15$isoscapes, method = "max")  # or method = "near" for categorical data
-dem15 <- terra::resample(dem, EuropeIsoscape15$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
-  terra::mask(woco.countries))*globcover15*dem15
-rm(globcover15,dem15)
-gc()
-
-globcover16 <- terra::resample(globcover, EuropeIsoscape16$isoscapes, method = "max")  # or method = "near" for categorical data
-dem16 <- terra::resample(dem, EuropeIsoscape16$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
-  terra::mask(woco.countries))*globcover16*dem16
-rm(globcover16,dem16)
-gc()
-
-globcover17 <- terra::resample(globcover, EuropeIsoscape17$isoscapes, method = "max")  # or method = "near" for categorical data
-dem17 <- terra::resample(dem, EuropeIsoscape17$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
-  terra::mask(woco.countries))*globcover17*dem17
-rm(globcover17,dem17)
-gc()
-
-globcover18 <- terra::resample(globcover, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
-dem18 <- terra::resample(dem, EuropeIsoscape18$isoscapes, method = "max")  # or method = "near" for categorical data
-WOCO.isoscape18 <- (EuropeIsoscape18$isoscapes %>%
-  terra::mask(woco.countries))*globcover18*dem18
-rm(globcover18,dem18)
-gc()
-
-
-saveRDS(WOCO.isoscape02,"./data/isoscape02.rds")
-saveRDS(WOCO.isoscape03,"./data/isoscape03.rds")
-saveRDS(WOCO.isoscape05,"./data/isoscape05.rds")
-saveRDS(WOCO.isoscape07,"./data/isoscape07.rds")
-saveRDS(WOCO.isoscape08,"./data/isoscape08.rds")
-saveRDS(WOCO.isoscape09,"./data/isoscape09.rds")
-saveRDS(WOCO.isoscape10,"./data/isoscape10.rds")
-saveRDS(WOCO.isoscape13,"./data/isoscape13.rds")
-saveRDS(WOCO.isoscape14,"./data/isoscape14.rds")
-saveRDS(WOCO.isoscape15,"./data/isoscape15.rds")
-saveRDS(WOCO.isoscape16,"./data/isoscape16.rds")
-saveRDS(WOCO.isoscape17,"./data/isoscape17.rds")
-saveRDS(WOCO.isoscape18,"./data/isoscape18.rds")
+WOCO.isoscape02<-readRDS("./data/isoscape02.rds")
+WOCO.isoscape03<-readRDS("./data/isoscape03.rds")
+WOCO.isoscape05<-readRDS("./data/isoscape05.rds")
+WOCO.isoscape07<-readRDS("./data/isoscape07.rds")
+WOCO.isoscape08<-readRDS("./data/isoscape08.rds")
+WOCO.isoscape09<-readRDS("./data/isoscape09.rds")
+WOCO.isoscape10<-readRDS("./data/isoscape10.rds")
+WOCO.isoscape13<-readRDS("./data/isoscape13.rds")
+WOCO.isoscape14<-readRDS("./data/isoscape14.rds")
+WOCO.isoscape15<-readRDS("./data/isoscape15.rds")
+WOCO.isoscape16<-readRDS("./data/isoscape16.rds")
+WOCO.isoscape17<-readRDS("./data/isoscape17.rds")
+WOCO.isoscape18<-readRDS("./data/isoscape18.rds")
 
 
 isoscapes<-list(WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
@@ -521,7 +535,7 @@ yearlist<-c(2002,2003,2005,2007,2008,2009,2010,2013,2014,2015,2016,2017,2018)
 for (y in sort(unique(woco.sf$Year))){
   
   woco.sf$d2h_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean
-  woco.sf$d2h_se_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean_predVar
+  woco.sf$d2h_se_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean_respVar
   
 }
 
@@ -535,7 +549,7 @@ woco.unk.vect<-terra::vect(woco.unk.sf)
 for (y in sort(unique(woco.unk.sf$Year))){
   
   woco.unk.sf$d2h_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean
-  woco.unk.sf$d2h_se_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean_predVar
+  woco.unk.sf$d2h_se_MA[woco.unk.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.unk.vect[woco.unk.vect$Year==y])$mean_respVar
   
 }
 
@@ -552,15 +566,15 @@ woco.countries.orig <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
                              "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
 
-WOCO.isoscape13 <- (EuropeIsoscape13$isoscapes %>%
+WOCO.isoscape13 <- WOCO.isoscape13 %>%
+                      terra::mask(woco.countries.orig)
+WOCO.isoscape14 <- (WOCO.isoscape14 %>%
                       terra::mask(woco.countries.orig ))
-WOCO.isoscape14 <- (EuropeIsoscape14$isoscapes %>%
+WOCO.isoscape15 <- (WOCO.isoscape15 %>%
                       terra::mask(woco.countries.orig ))
-WOCO.isoscape15 <- (EuropeIsoscape15$isoscapes %>%
+WOCO.isoscape16 <- (WOCO.isoscape16 %>%
                       terra::mask(woco.countries.orig ))
-WOCO.isoscape16 <- (EuropeIsoscape16$isoscapes %>%
-                      terra::mask(woco.countries.orig ))
-WOCO.isoscape17 <- (EuropeIsoscape17$isoscapes %>%
+WOCO.isoscape17 <- (WOCO.isoscape17 %>%
                       terra::mask(woco.countries.orig ))
 
 
@@ -569,8 +583,8 @@ isoscapes.orig<-list(WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isosca
 
 ## extract mean hydrogen isotope values and sd from that distribution
 
-mean.rain.d2H<-as.numeric()
-sd.rain.d2H<-as.numeric()
+mean.rain.d2H.Europe<-as.numeric()
+sd.rain.d2H.Europe<-as.numeric()
 yearlist<-c(2013,2014,2015,2016,2017)
 
 
@@ -578,8 +592,19 @@ for (y in sort(unique(UNK_WC$Year))){
   
   rain.d2H<-as.numeric(na.omit(terra::values(isoscapes.orig[[match(y,yearlist)]])[,1]))
   rain.d2H<-rain.d2H[rain.d2H!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
-  mean.rain.d2H[match(y,yearlist)]<-mean(rain.d2H, na.rm=T)
-  sd.rain.d2H[match(y,yearlist)]<-sd(rain.d2H, na.rm=T)
+  mean.rain.d2H.Europe[match(y,yearlist)]<-mean(rain.d2H, na.rm=T)
+  
+  ## calculating pooled variance as sum of sample and other variance: https://stats.stackexchange.com/questions/604824/how-can-i-average-the-variance-extracted-from-different-group-of-samples
+  # Sample variance of predictions:
+  sample_var.Europe <- as.numeric(na.omit(terra::values(isoscapes.orig[[match(y,yearlist)]])[,5]))
+  sample_var.Europe <-sample_var.Europe[sample_var.Europe!=0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+  
+  # Mean of individual variances:
+  mean_var.Europe <- mean(sample_var.Europe, na.rm=T)
+  
+  # Total variance:
+  total_var.Europe <- var(rain.d2H, na.rm=T) + mean_var.Europe
+  sd.rain.d2H.Europe[match(y,yearlist)]<-sqrt(total_var.Europe)
   
 }
 
