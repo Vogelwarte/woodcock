@@ -40,8 +40,8 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"),silent=T)
 
 
 # 1. READ IN PROCESSED ISOTOPE DATA -------------------------------------------------------------------------------------
-# prepared in WOCO_isotope_data_preparation.r
-load("data/woco.input.data.RData")
+# prepared in WOCO_rainfall_isoscape_creation.r
+load("data/woco.input.data.annual.RData")
 #load("data/woco.reduced.input.data.RData") ## without the calibration feathers from Hoodless and Powell
 try(rm(isoscape, globcover), silent=T)
 # ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
@@ -100,12 +100,7 @@ woco.t.abd.model<-nimbleCode({
   int.rain ~ dnorm(4.5, sd=5) # informative prior based on Powell
   b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
   b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
-  sigma.calib ~ dunif(0,20) # standard deviation
   dispersion ~ dnorm(25,sd=1) # dispersion parameter to convert prior probability into beta distribution - almost fixed quantity
-  
-  # Standard deviation for isotope ratios in rainwater 
-  sd.unknown[2]<-max(sigma.calib,sd.rain.d2H)  ### overall distribution across Europe
-  sd.unknown[1]<-sigma.calib
   
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -140,12 +135,14 @@ woco.t.abd.model<-nimbleCode({
     z[i] ~ dbern(p.nonlocal[i])  ## indicator variable from binomial draw of which isotope distribution fits better
     
     # Potential local distribution based on isotope ratio
-    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
-    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]  ### local expected feather isotope distribution
-
-    # evaluate origin feather isotope value from plausible target distributions
-    d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
+    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H.Europe[year[i]]    ### overall year-specific distribution across Europe
+    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H.local[i]  ### local expected feather isotope distribution
     
+    sd.unknown[i,2] <- sd.rain.d2H.Europe[year[i]]    ### overall year-specific variance across Europe
+    sd.unknown[i,1] <- sd.rain.d2H.local[i]  ### local expected feather isotope distribution variation
+    
+    # evaluate origin feather isotope value from plausible target distributions
+    d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[i,z[i]+1])
     
   } #i
   
@@ -175,13 +172,16 @@ table(woco.unk.sf$AGE,woco.unk.sf$KANTON)
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       nind.known = dim(woco.sf)[1],
-                      mean.rain.d2H = mean.rain.d2H,
-                      sd.rain.d2H = sd.rain.d2H,
+                      mean.rain.d2H.Europe = mean.rain.d2H,
+                      sd.rain.d2H.Europe = sd.rain.d2H,
+                      sd.rain.d2H.local = sd.rain.d2H,
                       d2H_rain.known=woco.sf$d2h_MA,
+                      mean.rain.d2H.local=woco.unk.sf$d2h_MA,
                       d2H_rain.unknown=woco.unk.sf$d2h_MA,
                       age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       age.known = ifelse(woco.sf$AGE=="Adulte",0,1),
                       p.nonlocal.prior2 = woco.unk.sf$abd_prior,
+                      year=as.numeric(as.factor(woco.unk.sf$year)),
                       # lm.mean.mig=logit(readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[2,1]),
                       # b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
                       # lm.mean.mig=logit(MCMCsummary(readRDS("output/woco_mig_depart_output_nimble.rds"))[2,1]),  ## became necessary after switching to stepwise run which produces different output than nimbleMCMC
@@ -200,7 +200,7 @@ iso.data <- list(d2H_feather.known = woco.sf$dH,
 ## 3.2. specify NIMBLE run settings --------------------
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","sigma.calib","dispersion","p.nonlocal") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
+parameters.iso <- c("b.rain","b.age","int.rain","dispersion","p.nonlocal") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -210,8 +210,7 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_MA-28*ifel
                   b.age = rnorm(1,-28.7, sd=5), # informative prior based on Powell
                   b.rain = rnorm(1,0.8, sd=1), # informative prior based on Powell
                   dispersion = 25, # dispersion parameter for beta distribution set to sensible value
-                  p.nonlocal = 1-woco.unk.sf$abd_prior, # initial start value will be replaced after test run
-                  sigma.calib = runif(1,0,20) # standard deviation
+                  p.nonlocal = 1-woco.unk.sf$abd_prior # initial start value will be replaced after test run
 )
 
 
