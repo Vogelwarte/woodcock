@@ -59,36 +59,36 @@ GNIPDataEUagg <- GNIPData %>%
 
 
 # 2. FITTING GEOSTATISTICAL MODELS ----------------
-
-
-EuropeFit02 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2002,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit03 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2003,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit05 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2005,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit07 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2007,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit08 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2008,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit09 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2009,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit10 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2010,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-
-
-EuropeFit13 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2013,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit14 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2014,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit15 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2015,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit16 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2016,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit17 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2017,],
-                    mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
-EuropeFit18 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2018,],
-                      mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# 
+# 
+# EuropeFit02 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2002,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit03 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2003,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit05 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2005,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit07 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2007,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit08 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2008,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit09 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2009,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit10 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2010,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# 
+# 
+# EuropeFit13 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2013,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit14 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2014,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit15 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2015,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit16 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2016,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit17 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2017,],
+#                     mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
+# EuropeFit18 <- isofit(data = GNIPDataEUagg[GNIPDataEUagg$year==2018,],
+#                       mean_model_fix = list(elev = TRUE, lat_abs = TRUE))
 
 
 
@@ -111,58 +111,58 @@ ElevEurope<- terra::rast('data/elevation_world_z5.tif')
 #plot(ElevEurope)
 
 
-ElevEurope02 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit02,
-                           aggregation_factor = 4)
-
-ElevEurope03 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit03,
-                           aggregation_factor = 4)
-
-ElevEurope05 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit05,
-                           aggregation_factor = 4)
-
-ElevEurope07 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit07,
-                           aggregation_factor = 4)
-
-ElevEurope08 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit08,
-                           aggregation_factor = 4)
-
-ElevEurope09 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit09,
-                           aggregation_factor = 4)
-
-ElevEurope10 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit10,
-                           aggregation_factor = 4)
-
-
-
-ElevEurope13 <- prepraster(raster = ElevEurope,
-                         isofit = EuropeFit13,
-                         aggregation_factor = 4)
-
-ElevEurope14 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit14,
-                           aggregation_factor = 4)
-
-ElevEurope15 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit15,
-                           aggregation_factor = 4)
-ElevEurope16 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit16,
-                           aggregation_factor = 4)
-
-ElevEurope17 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit17,
-                           aggregation_factor = 4)
-
-ElevEurope18 <- prepraster(raster = ElevEurope,
-                           isofit = EuropeFit18,
-                           aggregation_factor = 4)
+# ElevEurope02 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit02,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope03 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit03,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope05 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit05,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope07 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit07,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope08 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit08,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope09 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit09,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope10 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit10,
+#                            aggregation_factor = 4)
+# 
+# 
+# 
+# ElevEurope13 <- prepraster(raster = ElevEurope,
+#                          isofit = EuropeFit13,
+#                          aggregation_factor = 4)
+# 
+# ElevEurope14 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit14,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope15 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit15,
+#                            aggregation_factor = 4)
+# ElevEurope16 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit16,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope17 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit17,
+#                            aggregation_factor = 4)
+# 
+# ElevEurope18 <- prepraster(raster = ElevEurope,
+#                            isofit = EuropeFit18,
+#                            aggregation_factor = 4)
 
 
 
@@ -353,8 +353,8 @@ ele.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
 dem<-ElevEurope %>%
   terra::project(.,crs(woco.countries)) %>%
   terra::crop(woco.countries) %>%
-  terra::classify(rcl=ele.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(EuropeIsoscape02$isoscapes))
+  terra::classify(rcl=ele.mat,include.lowest=T,right=NA) #%>%
+  #terra::project(.,crs(EuropeIsoscape02$isoscapes))
 crs(dem)
 summary(dem)
 plot(dem)
@@ -363,8 +363,8 @@ plot(dem)
 #globcover<-terra::rast("S:/rasters/landuse/world/globcover2009.tif") %>%
 globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
   terra::crop(woco.countries) %>%
-  terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(EuropeIsoscape02$isoscapes))
+  terra::classify(rcl=forest.mat,include.lowest=T,right=NA) #%>%
+  #terra::project(.,crs(EuropeIsoscape02$isoscapes))
 crs(globcover)
 summary(globcover)
 plot(globcover)
@@ -532,12 +532,62 @@ woco.vect<-terra::vect(woco.sf)
 yearlist<-c(2002,2003,2005,2007,2008,2009,2010,2013,2014,2015,2016,2017,2018)
 
 
+layers_to_extract <- c("mean", "mean_respVar")
 for (y in sort(unique(woco.sf$Year))){
   
-  woco.sf$d2h_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean
-  woco.sf$d2h_se_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean_respVar
+  # ## this will include some 0 values that fall outside forest
+  # woco.sf$d2h_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean
+  # woco.sf$d2h_se_MA[woco.sf$Year==y]<-terra::extract(isoscapes[[match(y,yearlist)]],woco.vect[woco.vect$Year==y])$mean_respVar
+  # 
   
-}
+  # extract yearly isoscape and values
+  r<-isoscapes[[match(y,yearlist)]]
+
+  
+  # extract values for points of this year
+  vals <- terra::extract(r, woco.vect[woco.vect$Year == y])
+  vals <- vals[, -1]  # drop ID column
+  
+  # identify rows where selected layers are zero (because isotopes were masked by lack of forest or elevation)
+  zero_idx <- which(rowSums(vals[, layers_to_extract] != 0) == 0)
+  
+  if (length(zero_idx) > 0) {
+    # Get non-zero cells based on selected layers
+    all_vals <- values(r)
+    nonzero_cells <- which(rowSums(all_vals[, layers_to_extract] != 0) > 0)
+    
+    # Coordinates and values for non-zero cells
+    nonzero_coords <- xyFromCell(r, nonzero_cells)
+    nonzero_vals <- all_vals[nonzero_cells, layers_to_extract]
+    
+    # Loop through zero points
+    for (i in zero_idx) {
+      pt_coords <- geom(woco.vect[woco.vect$Year == y][i])[, c("x", "y")]
+      
+      # Compute distances to all non-zero cells
+      dists <- terra::distance(matrix(pt_coords, nrow = 1), nonzero_coords)
+      
+      # Find nearest non-zero cell
+      nearest_idx <- which.min(dists)
+      
+      # Replace both layer values with the nearest non-zero value
+      vals[i, layers_to_extract] <- nonzero_vals[nearest_idx, ]
+    }
+  }
+  
+  # write values in woco.sf dataframe
+  woco.sf$d2h_MA[woco.sf$Year == y]    <- vals[, "mean"]
+  woco.sf$d2h_se_MA[woco.sf$Year == y] <- vals[, "mean_respVar"]
+
+
+} ## end loop over year
+
+
+## troubleshoot which values are 0 - this happens because some known origin woodcocks were sampled outside of forest
+# woco.sf %>% dplyr::filter(woco.sf$d2h_MA==0)
+# plot(WOCO.isoscape08$mean)
+
+
 
 
 
