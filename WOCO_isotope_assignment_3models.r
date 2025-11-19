@@ -218,41 +218,41 @@ test <- nimbleModel(code = woco.t.abd.model,
                     data = iso.data,
                     inits = iso.inits,
                     calculate=TRUE)
-cModel <- compileNimble(test)
-
-
-### make sure that none of the logProbs result in NA or -Inf as the model will not converge
-test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
-test$initializeInfo()
-#help(modelInitialization)
-test$p.nonlocal.prior1
-test$p.nonlocal.prior
-summary(test$p.nonlocal)
-test$b.age
-test$b.rain
-test$int.rain
-
-hist(rbeta(1000,test$alpha[17],test$beta[17]))
-
-# Calculate all log probabilities
-cModel$calculate()
-
-# Get all stochastic nodes
-nodes <- cModel$getNodeNames(stochOnly = TRUE)
-
-# Find nodes with -Inf logProb
-badNodes <- nodes[sapply(nodes, function(n) cModel$getLogProb(n)) == -Inf]
-cat("Nodes with -Inf logProb:\n")
-print(badNodes)
-
-cModel$logProb_d2H_feather.unknown[17]  ### why are there no -Inf?
-iso.data$d2H_feather.unknown[17]
-cModel$logit.mig.unknown[16:17]
-cModel$p.nonlocal[16:17]
-cModel$mu.unknown[16:17,1]
-cModel$mu.unknown[16:17,2]
-cModel$sd.unknown[16:17,1]
-cModel$sd.unknown[16:17,2]
+# cModel <- compileNimble(test)
+# 
+# 
+# ### make sure that none of the logProbs result in NA or -Inf as the model will not converge
+# test$calculate()  # will sum all log probs - if there is -Inf or NA then something is not properly initialised
+# test$initializeInfo()
+# #help(modelInitialization)
+# test$p.nonlocal.prior1
+# test$p.nonlocal.prior
+# summary(test$p.nonlocal)
+# test$b.age
+# test$b.rain
+# test$int.rain
+# 
+# hist(rbeta(1000,test$alpha[17],test$beta[17]))
+# 
+# # Calculate all log probabilities
+# cModel$calculate()
+# 
+# # Get all stochastic nodes
+# nodes <- cModel$getNodeNames(stochOnly = TRUE)
+# 
+# # Find nodes with -Inf logProb
+# badNodes <- nodes[sapply(nodes, function(n) cModel$getLogProb(n)) == -Inf]
+# cat("Nodes with -Inf logProb:\n")
+# print(badNodes)
+# 
+# cModel$logProb_d2H_feather.unknown[17]  ### why are there no -Inf?
+# iso.data$d2H_feather.unknown[17]
+# cModel$logit.mig.unknown[16:17]
+# cModel$p.nonlocal[16:17]
+# cModel$mu.unknown[16:17,1]
+# cModel$mu.unknown[16:17,2]
+# cModel$sd.unknown[16:17,1]
+# cModel$sd.unknown[16:17,2]
   
 
 
@@ -375,29 +375,24 @@ out.ctn
 
 # 5. RUN MIGRATION ONLY PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
 
-woco.abd.model<-nimbleCode({
+woco.t.model<-nimbleCode({
   
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # CALIBRATION REGRESSION FOR KNOWN ORIGIN BIRDS 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Likelihood:  
   for (i in 1:nind.known){
-    d2H_feather.known[i] ~ dnorm(mu.known[i], sd=sigma.calib)
+    d2H_feather.known[i] ~ dnorm(mu.known[i], sd=d2H_rain.known.sd[i])
     mu.known[i] <- int.rain + b.age*age.known[i] + b.rain*d2H_rain.known[i]
   }
   
-  # Priors informed by known origin woodcock feathers in UK (Powell thesis 2012)
-  int.rain ~ dnorm(4.5, sd=5) # informative prior based on Powell
-  b.age ~ dnorm(-28.7, sd=5) # informative prior based on Powell
-  b.rain ~ dnorm(0.8, sd=1) # informative prior based on Powell
-  sigma.calib ~ dunif(0,20) # standard deviation
+  # Priors informed by known origin woodcock feathers in UK see code above
+  int.rain ~ dnorm(-13, sd=56) # 
+  b.age ~ dnorm(-24, sd=35) # 
+  b.rain ~ dnorm(0.2, sd=1) # 
   dispersion ~ dnorm(25,sd=1) # dispersion parameter to convert prior probability into beta distribution - almost fixed quantity
   
-  # Standard deviation for isotope ratios in rainwater 
-  sd.unknown[2]<-max(sigma.calib,sd.rain.d2H)  ### overall distribution across Europe
-  sd.unknown[1]<-sigma.calib
-  
-  
+
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # PROBABILITY ESTIMATION FOR SHOT UNKNOWN ORIGIN BIRDS 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -408,7 +403,7 @@ woco.abd.model<-nimbleCode({
     logit.mig.unknown[i] <- lm.mean.mig +      ### intercept from migration model
       b.mig.week*(unk.week[i])     ### week effect from migration model
     p.nonlocal.prior[i] <-ilogit(logit.mig.unknown[i]) ### predicted probability from migration model
-    
+
     # Latent indicator for isotope distribution based on beta distribution of shooting time prior
     alpha[i] <- max(1e-3, p.nonlocal.prior[i] * dispersion)   ## with safeguard to avoid values <0
     beta[i]  <- max(1e-3, (1 - p.nonlocal.prior[i]) * dispersion)   ## with safeguard to avoid values <0
@@ -416,12 +411,14 @@ woco.abd.model<-nimbleCode({
     z[i] ~ dbern(p.nonlocal[i])  ## indicator variable from binomial draw of which isotope distribution fits better
     
     # Potential local distribution based on isotope ratio
-    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H    ### overall distribution across Europe
-    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*d2H_rain.unknown[i]  ### local expected feather isotope distribution
+    mu.unknown[i,2] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H.Europe[year[i]]    ### overall year-specific distribution across Europe
+    mu.unknown[i,1] <- int.rain + b.age*age.unknown[i] + b.rain*mean.rain.d2H.local[i]  ### local expected feather isotope distribution
+    
+    sd.unknown[i,2] <- sd.rain.d2H.Europe[year[i]]    ### overall year-specific variance across Europe
+    sd.unknown[i,1] <- sd.rain.d2H.local[i]  ### local expected feather isotope distribution variation
     
     # evaluate origin feather isotope value from plausible target distributions
-    d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[z[i]+1])
-    
+    d2H_feather.unknown[i] ~ dnorm(mu.unknown[i,z[i] + 1], sd=sd.unknown[i,z[i]+1])
     
   } #i
   
@@ -435,7 +432,7 @@ woco.abd.model<-nimbleCode({
 ### this takes 600 sec for 100000 iterations and converges in that time
 tic()
 
-woco.iso.migprior <- nimbleMCMC(code = woco.orig.model.migprior,
+woco.iso.migprior <- nimbleMCMC(code = woco.t.model,
                        constants=iso.constants,
                        data = iso.data,
                        inits = iso.inits,
