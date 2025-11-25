@@ -623,7 +623,7 @@ toc()
 
 ## 6.3. SAVE MODEL OUTPUT AND ASSESS CONVERGENCE --------------------------------------------------------------
 
-out<- as.data.frame(MCMCsummary(woco.iso.null$samples)), params=c("b.rain","b.age","int.rain","p.nonlocal"))) #"int.abd","b.countday","b2.countday","r.abd")))
+out<- as.data.frame(MCMCsummary(woco.iso.null$samples, params=c("b.rain","b.age","int.rain","p.nonlocal"))) #"int.abd","b.countday","b2.countday","r.abd")))
 out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
@@ -702,7 +702,7 @@ wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
 
 
-FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior,mean.p.nonlocal.null) %>%
   group_by(age,ctn,ind, prior) %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
