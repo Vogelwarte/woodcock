@@ -120,6 +120,23 @@ singlecaps <- woco %>%
   summarise(N=length(unique(Ring)))
 
 
+## 1.1 TABLE S2 ---------------
+
+TableS2<-woco %>%
+  dplyr::filter(Beobachtung=="Fang") %>%
+  group_by(Ring) %>%
+  summarise(first=min(Datum), age=min(age,na.rm=T)) %>%
+  mutate(Year=year(first)) %>%
+  mutate(age=ifelse(is.na(age),7,age)) %>%
+  mutate(age=ifelse(age<4,"juvenile","adult")) %>%
+  ungroup() %>%
+  group_by(Year,age) %>%
+  summarise(n=length(unique(Ring))) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from="age",values_from="n", values_fill=0) %>%
+  adorn_totals()
+
+fwrite(TableS2,"manuscript/Table_S2.csv")
 
 
 
