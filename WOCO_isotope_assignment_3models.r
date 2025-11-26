@@ -191,7 +191,7 @@ iso.data <- list(d2H_feather.known = woco.sf$dH,
 ## 3.2. specify NIMBLE run settings --------------------
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","dispersion","p.nonlocal") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
+parameters.iso <- c("b.rain","b.age","int.rain","dispersion","p.nonlocal","z") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
 
 # Initial values  FOR ALL PARAMETERS
 ## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
@@ -371,7 +371,28 @@ out.ctn
 
 
 
+## 4.2 summarise assignment certainty across individuals ------------------------------------------
+prop.cert <- as_tibble(samples[,grep("z\\[", colnames(samples))]) %>%
+  gather(key="parameter",value="z") %>%
+  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+  group_by(age,ctn,ind) %>%
+  summarise(state=mean(z)) %>%
+  ungroup() %>%
+  mutate(cert.local=ifelse(state<0.25,1,0)) %>%
+  mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
+  group_by(age) %>%
+  summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
+  mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
+  mutate(prior="combined abundance and migration")
 
+
+  
+  
+  
+  
+  
 
 # 5. RUN MIGRATION ONLY PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
 
@@ -456,7 +477,7 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_iso_time_origin_parm_estimates_mig_prior.csv")
+#fwrite(out,"output/woco_iso_time_origin_parm_estimates_mig_prior.csv")
 
 
 
@@ -470,7 +491,7 @@ mean.p.nonlocal.migprior <- as_tibble(samples.migprior[,grep("p.nonlocal\\[", co
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="only migration")
-fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
+#fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
 
 # summarise across SUI
 
@@ -506,6 +527,24 @@ out.ctn
 
 
 
+
+
+## 5.5 summarise assignment certainty across individuals ------------------------------------------
+prop.cert <- as_tibble(samples.migprior[,grep("z\\[", colnames(samples.migprior))]) %>%
+  gather(key="parameter",value="z") %>%
+  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+  group_by(age,ctn,ind) %>%
+  summarise(state=mean(z)) %>%
+  ungroup() %>%
+  mutate(cert.local=ifelse(state<0.25,1,0)) %>%
+  mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
+  group_by(age) %>%
+  summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
+  mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
+  mutate(prior="only migration") %>%
+  bind_rows(prop.cert)
 
 
 
@@ -596,7 +635,7 @@ iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_MA-28*ifel
 )
 
 # Parameters monitored
-parameters.iso <- c("b.rain","b.age","int.rain","p.nonlocal") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
+parameters.iso <- c("b.rain","b.age","int.rain","p.nonlocal","z") #,"p.nonlocal.prior","p.nonlocal.prior1") including these bloats the output object
 
 
 
@@ -628,7 +667,7 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_null_origin_parm_estimates.csv")
+#fwrite(out,"output/woco_null_origin_parm_estimates.csv")
 
 
 
@@ -673,10 +712,26 @@ fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_no_prior.csv")
 
 
 
+## 6.5 summarise assignment certainty across individuals ------------------------------------------
+prop.cert <- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
+  gather(key="parameter",value="z") %>%
+  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+  group_by(age,ctn,ind) %>%
+  summarise(state=mean(z)) %>%
+  ungroup() %>%
+  mutate(cert.local=ifelse(state<0.25,1,0)) %>%
+  mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
+  group_by(age) %>%
+  summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
+  mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
+  mutate(prior="uninformative prior") %>%
+  bind_rows(prop.cert)
+fwrite(prop.cert,"output/woco_assignment_certainty_proportions.csv")
 
 
-
-
+prop.cert %>% arrange(age, prior) %>% print(n=20)
 
 
 # 7. summarise output in graphical form ------------------------------------------
@@ -741,9 +796,9 @@ ggsave(plot=FIGURE2,
 
 
 
-# 6. SUMMARY FIGURES FOR MANUSCRIPT ----------------------------------
+# 7. SUMMARY FIGURES FOR MANUSCRIPT ----------------------------------
 
-## 6.1. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
+## 7.1. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
 woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
 FIGURES2<-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
   geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
@@ -794,7 +849,7 @@ summary(UNK_WC$dH)
 
 
 
-# 7. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES ----------------------------------
+# 8. CREATE MAPS FOR EACH CANTON WHAT LOCAL RAINFALL ENCOMPASSES ----------------------------------
 plot_list <- list()
 WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
   crop(woco.countries)
