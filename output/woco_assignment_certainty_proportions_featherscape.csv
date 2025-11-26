@@ -1,0 +1,7 @@
+age,n,n.local,n.nonlocal,prop.cert.local,prop.cert.nonlocal,prior
+0,187,0,184,0,0.983957219251337,uninformative prior
+1,645,0,641,0,0.993798449612403,uninformative prior
+0,187,33,35,0.176470588235294,0.18716577540107,only migration
+1,645,68,276,0.105426356589147,0.427906976744186,only migration
+0,187,0,178,0,0.951871657754011,combined abundance and migration
+1,645,5,609,0.00775193798449612,0.944186046511628,combined abundance and migration

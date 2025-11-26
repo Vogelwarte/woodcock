@@ -418,7 +418,7 @@ woco.null.model<-nimbleCode({
   for (i in 1:nind.unkn){
     
     # Latent indicator for isotope distribution based on beta distribution of shooting time prior
-    z[i] ~ dbern(p.nonlocal[age.unknown[i]+1,canton[i]])  ## indicator variable from binomial draw of which isotope distribution fits better
+    z[i] ~ dbern(p.nonlocal[age[i]+1,canton[i]])  ## indicator variable from binomial draw of which isotope distribution fits better
     
     # Potential local distribution based on isotope ratio
     mu.unknown[i,2] <- mean.feather.d2H[age[i]+1]    ### overall distribution across Europe
@@ -443,18 +443,17 @@ woco.null.model<-nimbleCode({
 # Data are values that you might want to change, basically anything that only appears on the left of a ~
 
 iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
-                      mean.rain.d2H.Europe = mean.rain.d2H.Europe,
-                      mean.rain.d2H.local=woco.unk.sf$d2h_MA,
-                      sd.rain.d2H.Europe = sd.rain.d2H.Europe,
-                      sd.rain.d2H.local = ifelse(sqrt(woco.unk.sf$d2h_se_MA)==0,mean(woco.unk.sf$d2h_MA),sqrt(woco.unk.sf$d2h_se_MA)),  ## given as variance in data frame, needs to be sqrt for sd
-                      age.unknown = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
+                      mean.feather.d2H = c(mean.rain.d2H.ad,mean.rain.d2H.juv),
+                      sd.feather.d2H = c(sd.rain.d2H.ad,sd.rain.d2H.juv),
+                      d2H_feather.local=woco.unk.sf$d2h_local_predicted,
+                      d2H_feather.local.sd=woco.unk.sf$d2h_local_sd,
+                      age = ifelse(woco.unk.sf$AGE=="Adulte",0,1),
                       canton=as.numeric(as.factor(woco.unk.sf$KANTON)),
                       ncantons=length(unique(woco.unk.sf$KANTON)))   ## migration weeks start only in August
 
 
 # Initial values  FOR ALL PARAMETERS
-## NIMBLE CAN HAVE CONVERGENCE PROBLEMS IF DIFFERENT INITS ARE SPECIFIED: https://groups.google.com/g/nimble-users/c/dgx9ajOniG8
-iso.inits <- list(z = ifelse(woco.unk.sf$dH < 4.5+0.8*woco.unk.sf$d2h_MA-28*ifelse(woco.unk.sf$AGE=="Adulte",0,1),0,1),
+iso.inits <- list(z = ifelse(woco.unk.sf$dH < woco.unk.sf$d2h_local_predicted,0,1),
                   p.nonlocal = matrix(rbeta(12,2,2),ncol=6,nrow=2)
 )
 
@@ -504,7 +503,7 @@ mean.p.nonlocal.null <- as_tibble(out[grep("p.nonlocal\\[", out$parameter),]) %>
   mutate(prior="uninformative prior") %>%
   select(age,ctn,prior,median, lcl,ucl) %>%
   rename(for.med=median,for.ucl=ucl, for.lcl=lcl)
-fwrite(mean.p.nonlocal.null,"output/WOCO_nonlocal_probs_no_prior.csv")
+fwrite(mean.p.nonlocal.null,"output/WOCO_nonlocal_probs_no_prior_featherscape.csv")
 
 # summarise across SUI
 # compile all the samples
@@ -521,7 +520,7 @@ out.sui<- as_tibble(samples.null[,grep("p.nonlocal\\[", colnames(samples.null))]
   mutate(prior="uninformative prior") %>%
   bind_rows(out.sui)
 out.sui  
-fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
+fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI_featherscape.csv")
 
 
 # summarise by Canton
@@ -532,7 +531,7 @@ out.ctn<- mean.p.nonlocal.null %>%
   select(-age)  %>%
   bind_rows(out.ctn)
 out.ctn
-fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_no_prior.csv")
+fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_no_prior_featherscape.csv")
 
 
 
@@ -540,7 +539,7 @@ fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_no_prior.csv")
 prop.cert <- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
   gather(key="parameter",value="z") %>%
   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
-  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(age=iso.constants$age[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   group_by(age,ctn,ind) %>%
   summarise(state=mean(z)) %>%
@@ -552,7 +551,7 @@ prop.cert <- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
   mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
   mutate(prior="uninformative prior") %>%
   bind_rows(prop.cert)
-fwrite(prop.cert,"output/woco_assignment_certainty_proportions.csv")
+fwrite(prop.cert,"output/woco_assignment_certainty_proportions_featherscape.csv")
 
 
 prop.cert %>% arrange(age, prior) %>% print(n=20)
@@ -560,13 +559,8 @@ prop.cert %>% arrange(age, prior) %>% print(n=20)
 
 # 7. summarise output in graphical form ------------------------------------------
 
-# mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
-# mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
 
-
-
-
-FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+FIGURES2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   group_by(age,ctn,ind, prior) %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
@@ -606,16 +600,16 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
         legend.position.inside=c(0.90,0.6),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
-FIGURE2
+FIGURES2
 
 
 ggsave(plot=FIGURE2,
-       filename="output/woco_origin_probability_estimates_all_priors.jpg", 
+       filename="output/woco_origin_probability_estimates_all_priors_featherscape.jpg", 
        device="jpg",width=9, height=12)
 
 
-ggsave(plot=FIGURE2,
-       filename="manuscript/Figure_2.jpg", 
+ggsave(plot=FIGURES2,
+       filename="manuscript/Figure_S2_featherscape.jpg", 
        device="jpg",width=9, height=12, dpi=600)
 
 
@@ -657,7 +651,6 @@ FIGURES2
 table(ORIG_WC$AGE)
 length(UNK_WC$dH)/9681
 table(UNK_WC$AGE)
-summary(ORIG_WC$dH[ORIG_WC$PROVENANCE_voigt=="Suisse"])
 summary(UNK_WC$dH)
 
 
