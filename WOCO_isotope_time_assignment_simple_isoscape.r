@@ -216,7 +216,7 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal\\[", colnames(samples))])
   mutate(age=iso.constants$age[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="combined abundance and migration")
-
+#fwrite(mean.p.nonlocal,"output/WOCO_nonlocal_probs_featherscape.csv")
 
 # summarise across SUI
 
@@ -339,7 +339,7 @@ mean.p.nonlocal.migprior <- as_tibble(samples.migprior[,grep("p.nonlocal\\[", co
   mutate(age=iso.constants$age[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="only migration")
-#fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
+#fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior_featherscape.csv")
 
 # summarise across SUI
 
