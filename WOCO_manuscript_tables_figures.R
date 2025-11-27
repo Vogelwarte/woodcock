@@ -477,6 +477,8 @@ EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
   dplyr::select(admin,name,adm0_a3,geometry)
 woco.sf <- ORIG_WC %>%
   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+
+
 isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
   crop(extent(SUI))
 woco.countries <- EUR %>%
@@ -558,6 +560,118 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   
 } #ct
 
+
+#### completely revised figure on 26 Nov 2025
+# prepared in WOCO_rainfall_isoscape_creation.r
+load("data/woco.input.data.annual.RData")
+woco.sf<-bind_rows(woco.unk.sf,woco.sf) %>%
+  dplyr::filter(KANTON %in% unique(woco.unk.sf$KANTON))
+
+
+bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
+SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
+  st_transform(st_crs('EPSG:4326')) # Project to WGS84
+EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_crop(bbox) %>%
+  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
+  dplyr::select(admin,name,adm0_a3,geometry)
+
+
+WOCO.isoscape02<-readRDS("./data/isoscape02.rds")
+WOCO.isoscape03<-readRDS("./data/isoscape03.rds")
+WOCO.isoscape05<-readRDS("./data/isoscape05.rds")
+WOCO.isoscape07<-readRDS("./data/isoscape07.rds")
+WOCO.isoscape08<-readRDS("./data/isoscape08.rds")
+WOCO.isoscape09<-readRDS("./data/isoscape09.rds")
+WOCO.isoscape10<-readRDS("./data/isoscape10.rds")
+WOCO.isoscape13<-readRDS("./data/isoscape13.rds")
+WOCO.isoscape14<-readRDS("./data/isoscape14.rds")
+WOCO.isoscape15<-readRDS("./data/isoscape15.rds")
+WOCO.isoscape16<-readRDS("./data/isoscape16.rds")
+WOCO.isoscape17<-readRDS("./data/isoscape17.rds")
+WOCO.isoscape18<-readRDS("./data/isoscape18.rds")
+
+
+isoscapes<-list(WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
+                WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17,WOCO.isoscape18)
+
+
+
+
+refscape<-WOCO.isoscape13  ## make sure thzat all have the same extent
+plot_list <- list()
+for (ct in 1:length(unique(woco.unk.sf$KANTON))){
+  
+  ## get canton-wise distribution
+  woco.cnt <- woco.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
+  cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
+    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) #%>%
+    # rowwise() %>%
+    # mutate(pot.orig.d2H=rnorm(1,d2h_MA,d2h_se_MA)) %>%
+    # ungroup() %>%
+    # group_by(KANTON) %>%
+    # summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
+  
+  ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
+  # Your observations (numeric vector)
+  obs <- cnt.iso$d2h_MA
+  probscape<-list()
+  for (l in 1:length(isoscapes)){
+    
+    # Select the layers that hold the mean and (response) variance
+    iso <- isoscapes[[l]][[c("mean", "mean_predVar")]]
+    iso <-  terra::resample(iso,refscape, method="near")
+    
+    # Sum of log-densities per cell (robust; avoids underflow)
+    ll <- terra::app(
+      iso,
+      fun = function(v, obs) {
+        mu  <- v[1]
+        var <- v[2]
+        if (is.na(mu) || is.na(var) || var <= 0) return(NA_real_)
+        sigma <- sqrt(var)
+        max(dnorm(obs, mean = mu, sd = sigma, log = TRUE))
+      },
+      obs = obs
+    )
+    
+    names(ll) <- "loglik"
+    
+    # Optional: convert to a normalized (relative) probability surface
+    probscape[[l]] <- exp(ll)
+    
+  }
+  
+  CNT.isoscape <-  terra::app(sds(probscape),mean)
+  
+  ## create plot
+  plot_list[[ct]] <- ggplot(EUR) +
+    geom_sf() +
+    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=loglik))+
+    geom_sf(data=woco.cnt,color="red") +
+    geom_sf(data=EUR, colour="grey12", fill=NA) +
+    #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
+    
+    annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
+    annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
+    scale_fill_gradient(low = 'lightgray', high = 'darkred', na.value=NA) +
+    
+    ## beautification of the axes
+    theme(panel.background=element_rect(fill="white", colour="black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text=element_text(size=12, color="black"),
+          axis.title=element_blank(),
+          legend.position="none",
+          plot.margin= unit(rep(.5, 4), "lines"),
+          strip.text=element_text(size=18, color="black"),
+          strip.background=element_rect(fill="white", colour="black"))
+  
+} #ct
+
+
+
+
 FIG_S3<-grid.arrange(grobs=plot_list,ncol=2)
 ggsave(filename="manuscript/Figure_S3.jpg", plot=FIG_S3,
        device="jpg",width=8, height=12)
@@ -570,12 +684,54 @@ ggsave(filename="manuscript/Figure_S3.jpg", plot=FIG_S3,
 
 
 
+# FIGURE S2 ------------------------------------------
+
+mean.p.nonlocal.null<-fread("output/WOCO_nonlocal_probs_no_prior_featherscape.csv")
+mean.p.nonlocal.migprior<-fwrite("output/WOCO_nonlocal_probs_mig_prior_featherscape.csv")
+mean.p.nonlocal<-fwrite("output/WOCO_nonlocal_probs_featherscape.csv")
 
 
-
-
-
-
+FIGURES2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn, prior) %>%
+  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  bind_rows(mean.p.nonlocal.null) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  facet_wrap(~prior, ncol = 1) +
+  
+  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
+  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
+  
+  ## format axis ticks
+  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.90,0.6),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES2
 
 
 
