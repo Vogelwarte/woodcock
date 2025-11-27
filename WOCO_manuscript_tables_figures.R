@@ -441,124 +441,124 @@ ggsave(plot=FIG_s4,
 
 
 # 7. FIGURE S3 ----------------------------------
-woco<-fread("data/WOCO_isotopes.csv")
-
-woco$dH<-10.774 + (0.852*woco$dH_scaled)
-woco %>% dplyr::filter(is.na(dH))
-ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
-  dplyr::filter(!is.na(dH)) %>%
-  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
-UNK_WC<-woco %>% dplyr::filter(ORIGINE=="UNBEKANNT") %>%
-  dplyr::filter(JAGDT==1) %>%
-  dplyr::filter(!is.na(DATE)) %>%
-  dplyr::filter(!is.na(dH)) %>%
-  mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
-  dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
-  rename(DATE=Date)
-UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
-rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
-  mutate(sd=parse_date_time(DATE, orders="dmy")) %>%
-  mutate(feather_growth_date=if_else(AGE=="Adulte",
-                                     if_else(month(sd)<7,
-                                             ymd(paste(year(sd)-1,"-06-15")),
-                                             ymd(paste(year(sd),"-06-15"))),
-                                     if_else(month(sd)<9,
-                                             ymd(paste(year(sd)-1,"-05-15")),
-                                             ymd(paste(year(sd),"-08-15"))))) %>%
-  mutate(feather_sampling_date=as.Date(sd)) %>%
-  dplyr::select(-DATE,-sd,-AGE)
-
-bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
-SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
-  st_transform(st_crs('EPSG:4326')) # Project to WGS84
-EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
-  st_crop(bbox) %>%
-  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
-  dplyr::select(admin,name,adm0_a3,geometry)
-woco.sf <- ORIG_WC %>%
-  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-
-
-isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
-  crop(extent(SUI))
-woco.countries <- EUR %>%
-  dplyr::filter(admin %in% c("Ukraine","Switzerland","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
-                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
-forest.mat<-matrix(0, nrow=3, ncol=3)
-forest.mat[,1]<-c(11,40,110)  ## from values for conversion matrix
-forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
-forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
-globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
-  crop(woco.countries) %>%
-  terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
-  terra::project(.,crs(isoscape))
-WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
-  crop(woco.countries)
-globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
-WOCO.isoscape <- WOCO.isoscape*globcover
-rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
-rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
-woco.vect<-terra::vect(woco.sf)
-woco.sf$d2h_MA<-terra::extract(isoscape,woco.vect)$d2h_MA
-woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$d2h_se_MA
-woco.unk.sf <- UNK_WC %>%
-  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
-woco.unk.vect<-terra::vect(woco.unk.sf)
-
-woco.unk.sf$d2h_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_MA
-woco.unk.sf$d2h_se_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_se_MA
-woco.unk.sf %>% filter(is.na(AGE))
-
-
-
-woco.unk.sf <- woco.unk.sf %>%
-  filter(!is.na(AGE)) %>%
-  filter(!is.na(dH)) %>%
-  #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
-  filter(!is.na(d2h_MA))
-
-
-
-plot_list <- list()
-for (ct in 1:length(unique(woco.unk.sf$KANTON))){
-  
-  ## get canton-wise distribution
-  woco.cnt <- woco.unk.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
-  cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
-    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) %>%
-    rowwise() %>%
-    mutate(pot.orig.d2H=rnorm(1,d2h_MA,d2h_se_MA)) %>%
-    ungroup() %>%
-    group_by(KANTON) %>%
-    summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
-  
-  ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
-  CNT.isoscape <- ifel(WOCO.isoscape >= cnt.iso$min & WOCO.isoscape <= cnt.iso$max, 1, 0)
-  
-  ## create plot
-  plot_list[[ct]] <- ggplot(EUR) +
-    geom_sf() +
-    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h_MA))+
-    geom_sf(data=woco.cnt,color="red") +
-    geom_sf(data=EUR, colour="grey12", fill=NA) +
-    #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
-    
-    annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
-    annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
-    scale_fill_gradient(low = 'lightgray', high = 'lightgreen', na.value=NA) +
-    
-    ## beautification of the axes
-    theme(panel.background=element_rect(fill="white", colour="black"),
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          axis.text=element_text(size=12, color="black"),
-          axis.title=element_blank(),
-          legend.position="none",
-          plot.margin= unit(rep(.5, 4), "lines"),
-          strip.text=element_text(size=18, color="black"),
-          strip.background=element_rect(fill="white", colour="black"))
-  
-} #ct
+# woco<-fread("data/WOCO_isotopes.csv")
+# 
+# woco$dH<-10.774 + (0.852*woco$dH_scaled)
+# woco %>% dplyr::filter(is.na(dH))
+# ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
+#   dplyr::filter(!is.na(dH)) %>%
+#   dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
+# UNK_WC<-woco %>% dplyr::filter(ORIGINE=="UNBEKANNT") %>%
+#   dplyr::filter(JAGDT==1) %>%
+#   dplyr::filter(!is.na(DATE)) %>%
+#   dplyr::filter(!is.na(dH)) %>%
+#   mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
+#   dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+#   rename(DATE=Date)
+# UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
+# rain_orig_wc<-ORIG_WC %>% dplyr::select(-PROVENANCE_voigt,-ADULTE) %>%
+#   mutate(sd=parse_date_time(DATE, orders="dmy")) %>%
+#   mutate(feather_growth_date=if_else(AGE=="Adulte",
+#                                      if_else(month(sd)<7,
+#                                              ymd(paste(year(sd)-1,"-06-15")),
+#                                              ymd(paste(year(sd),"-06-15"))),
+#                                      if_else(month(sd)<9,
+#                                              ymd(paste(year(sd)-1,"-05-15")),
+#                                              ymd(paste(year(sd),"-08-15"))))) %>%
+#   mutate(feather_sampling_date=as.Date(sd)) %>%
+#   dplyr::select(-DATE,-sd,-AGE)
+# 
+# bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
+# SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
+#   st_transform(st_crs('EPSG:4326')) # Project to WGS84
+# EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
+#   st_crop(bbox) %>%
+#   st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
+#   dplyr::select(admin,name,adm0_a3,geometry)
+# woco.sf <- ORIG_WC %>%
+#   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+# 
+# 
+# isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
+#   crop(extent(SUI))
+# woco.countries <- EUR %>%
+#   dplyr::filter(admin %in% c("Ukraine","Switzerland","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
+#                              "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+# forest.mat<-matrix(0, nrow=3, ncol=3)
+# forest.mat[,1]<-c(11,40,110)  ## from values for conversion matrix
+# forest.mat[,2]<-c(30,100,230)  ## to values for conversion matrix
+# forest.mat[,3]<-c(0,1,0)  ## replacement values for conversion matrix
+# globcover<-terra::rast("data/GLOBCOVER_L4_200901_200912_V2.3.tif") %>%
+#   crop(woco.countries) %>%
+#   terra::classify(rcl=forest.mat,include.lowest=T,right=NA) %>%
+#   terra::project(.,crs(isoscape))
+# WOCO.isoscape <- readRDS("data/global_d2H_MA_isoscape.rds") %>%
+#   crop(woco.countries)
+# globcover <- terra::resample(globcover,WOCO.isoscape, method="max")
+# WOCO.isoscape <- WOCO.isoscape*globcover
+# rain.d2H<-as.numeric(na.omit(terra::values(WOCO.isoscape)[,1]))
+# rain.d2H<-rain.d2H[rain.d2H<0]  ## remove the non-forest values (>10,0000 grid cells are removed)
+# woco.vect<-terra::vect(woco.sf)
+# woco.sf$d2h_MA<-terra::extract(isoscape,woco.vect)$d2h_MA
+# woco.sf$d2h_se_MA<-terra::extract(isoscape,woco.vect)$d2h_se_MA
+# woco.unk.sf <- UNK_WC %>%
+#   st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+# woco.unk.vect<-terra::vect(woco.unk.sf)
+# 
+# woco.unk.sf$d2h_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_MA
+# woco.unk.sf$d2h_se_MA<-terra::extract(isoscape,woco.unk.vect)$d2h_se_MA
+# woco.unk.sf %>% filter(is.na(AGE))
+# 
+# 
+# 
+# woco.unk.sf <- woco.unk.sf %>%
+#   filter(!is.na(AGE)) %>%
+#   filter(!is.na(dH)) %>%
+#   #filter(KANTON !="VS") %>% ## remove Valais because only 6 birds from 1 age class, causes imbalance in data
+#   filter(!is.na(d2h_MA))
+# 
+# 
+# 
+# plot_list <- list()
+# for (ct in 1:length(unique(woco.unk.sf$KANTON))){
+#   
+#   ## get canton-wise distribution
+#   woco.cnt <- woco.unk.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
+#   cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
+#     dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) %>%
+#     rowwise() %>%
+#     mutate(pot.orig.d2H=rnorm(1,d2h_MA,d2h_se_MA)) %>%
+#     ungroup() %>%
+#     group_by(KANTON) %>%
+#     summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
+#   
+#   ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
+#   CNT.isoscape <- ifel(WOCO.isoscape >= cnt.iso$min & WOCO.isoscape <= cnt.iso$max, 1, 0)
+#   
+#   ## create plot
+#   plot_list[[ct]] <- ggplot(EUR) +
+#     geom_sf() +
+#     tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=d2h_MA))+
+#     geom_sf(data=woco.cnt,color="red") +
+#     geom_sf(data=EUR, colour="grey12", fill=NA) +
+#     #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
+#     
+#     annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
+#     annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
+#     scale_fill_gradient(low = 'lightgray', high = 'lightgreen', na.value=NA) +
+#     
+#     ## beautification of the axes
+#     theme(panel.background=element_rect(fill="white", colour="black"),
+#           panel.grid.major = element_blank(),
+#           panel.grid.minor = element_blank(),
+#           axis.text=element_text(size=12, color="black"),
+#           axis.title=element_blank(),
+#           legend.position="none",
+#           plot.margin= unit(rep(.5, 4), "lines"),
+#           strip.text=element_text(size=18, color="black"),
+#           strip.background=element_rect(fill="white", colour="black"))
+#   
+# } #ct
 
 
 #### completely revised figure on 26 Nov 2025
@@ -642,7 +642,8 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
     
   }
   
-  CNT.isoscape <-  terra::app(sds(probscape),mean)
+  CNT.isoscape <-  terra::app(sds(probscape),mean) %>%
+    terra::crop(EUR)
   
   ## create plot
   plot_list[[ct]] <- ggplot(EUR) +
@@ -654,7 +655,9 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
     
     annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
     annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
-    scale_fill_gradient(low = 'lightgray', high = 'darkred', na.value=NA) +
+    scale_fill_gradient(low = 'lightgray', high = 'darkred', na.value="white") +
+    labs(fill = expression("Probability of matching " * delta^2 * H)) +
+    
     
     ## beautification of the axes
     theme(panel.background=element_rect(fill="white", colour="black"),
@@ -662,7 +665,10 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
           panel.grid.minor = element_blank(),
           axis.text=element_text(size=12, color="black"),
           axis.title=element_blank(),
-          legend.position="none",
+          legend.position="inside",
+          legend.position.inside=c(0.5,0.05),
+          legend.direction = "horizontal",
+          legend.background=element_blank(),
           plot.margin= unit(rep(.5, 4), "lines"),
           strip.text=element_text(size=18, color="black"),
           strip.background=element_rect(fill="white", colour="black"))
