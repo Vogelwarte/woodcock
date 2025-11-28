@@ -576,20 +576,36 @@ EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
   st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
   dplyr::select(admin,name,adm0_a3,geometry)
 
+woco.countries.orig <- EUR %>%
+  dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
 
-WOCO.isoscape02<-readRDS("./data/isoscape02.rds")
-WOCO.isoscape03<-readRDS("./data/isoscape03.rds")
-WOCO.isoscape05<-readRDS("./data/isoscape05.rds")
-WOCO.isoscape07<-readRDS("./data/isoscape07.rds")
-WOCO.isoscape08<-readRDS("./data/isoscape08.rds")
-WOCO.isoscape09<-readRDS("./data/isoscape09.rds")
-WOCO.isoscape10<-readRDS("./data/isoscape10.rds")
-WOCO.isoscape13<-readRDS("./data/isoscape13.rds")
-WOCO.isoscape14<-readRDS("./data/isoscape14.rds")
-WOCO.isoscape15<-readRDS("./data/isoscape15.rds")
-WOCO.isoscape16<-readRDS("./data/isoscape16.rds")
-WOCO.isoscape17<-readRDS("./data/isoscape17.rds")
-WOCO.isoscape18<-readRDS("./data/isoscape18.rds")
+WOCO.isoscape02<-readRDS("./data/isoscape02.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape03<-readRDS("./data/isoscape03.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape05<-readRDS("./data/isoscape05.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape07<-readRDS("./data/isoscape07.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape08<-readRDS("./data/isoscape08.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape09<-readRDS("./data/isoscape09.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape10<-readRDS("./data/isoscape10.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape13<-readRDS("./data/isoscape13.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape14<-readRDS("./data/isoscape14.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape15<-readRDS("./data/isoscape15.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape16<-readRDS("./data/isoscape16.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape17<-readRDS("./data/isoscape17.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape18<-readRDS("./data/isoscape18.rds") %>%
+  terra::mask(woco.countries.orig)
 
 
 isoscapes<-list(WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
@@ -605,12 +621,7 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
   ## get canton-wise distribution
   woco.cnt <- woco.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
   cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
-    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) #%>%
-    # rowwise() %>%
-    # mutate(pot.orig.d2H=rnorm(1,d2h_MA,d2h_se_MA)) %>%
-    # ungroup() %>%
-    # group_by(KANTON) %>%
-    # summarise(min=min(pot.orig.d2H), max=max(pot.orig.d2H))
+    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) 
   
   ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
   # Your observations (numeric vector)
@@ -622,23 +633,20 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
     iso <- isoscapes[[l]][[c("mean", "mean_predVar")]]
     iso <-  terra::resample(iso,refscape, method="near")
     
-    # Sum of log-densities per cell (robust; avoids underflow)
-    ll <- terra::app(
+    # Max of probability per cell (robust; avoids underflow)
+    probscape[[l]] <- terra::app(
       iso,
       fun = function(v, obs) {
         mu  <- v[1]
         var <- v[2]
         if (is.na(mu) || is.na(var) || var <= 0) return(NA_real_)
         sigma <- sqrt(var)
-        max(dnorm(obs, mean = mu, sd = sigma, log = TRUE))
+        mean(pnorm(obs, mean = mu, sd = sigma, lower.tail = FALSE))
       },
       obs = obs
     )
     
-    names(ll) <- "loglik"
-    
-    # Optional: convert to a normalized (relative) probability surface
-    probscape[[l]] <- exp(ll)
+    names(probscape[[l]])<- "loglik"
     
   }
   
@@ -655,8 +663,8 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
     
     annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
     annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
-    scale_fill_gradient(low = 'lightgray', high = 'darkred', na.value="white") +
-    labs(fill = expression("Probability of matching " * delta^2 * H)) +
+    scale_fill_gradient(limits=c(0,1), low = 'white', high = 'darkred', na.value="white") +
+    labs(fill = expression("Probability of indistinguishable rainfall " * delta^2 * H)) +
     
     
     ## beautification of the axes
@@ -678,10 +686,34 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 
 
 
-FIG_S3<-grid.arrange(grobs=plot_list,ncol=2)
-ggsave(filename="manuscript/Figure_S3.jpg", plot=FIG_S3,
-       device="jpg",width=8, height=12)
+#FIG_S3<-grid.arrange(grobs=plot_list,ncol=2)
 
+
+library(cowplot)
+
+# Extract the legend from one plot
+legend <- get_legend(plot_list[[1]] + theme(legend.position = "bottom"))
+
+# Remove legends from all plots
+plots_no_legend <- lapply(plot_list, function(p) p + theme(legend.position = "none"))
+
+# Combine plots and legend
+FIG_S3 <- plot_grid(
+  plot_grid(plotlist = plots_no_legend, ncol = 2),
+  legend,
+  ncol = 1,
+  rel_heights = c(1, 0.1)  # Adjust legend height
+)
+
+
+FIG_S3 <- plot_grid(plotlist = plots_no_legend, ncol = 2, align = "none",labels = NULL,label_size = 0 )
+FIG_S3 <- plot_grid(FIG_S3, legend, ncol = 1, rel_heights = c(1, 0.1),rel_widths = c(1,0.5))
+FIG_S3
+
+
+
+ggsave(filename="manuscript/Figure_S3_new.jpg", plot=FIG_S3,
+       device="jpg",width=10, height=14)
 
 
 
