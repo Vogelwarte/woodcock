@@ -682,16 +682,47 @@ mean.p.nonlocal.null <- as_tibble(out[grep("p.nonlocal\\[", out$parameter),]) %>
   rename(for.med=median,for.ucl=ucl, for.lcl=lcl)
 fwrite(mean.p.nonlocal.null,"output/WOCO_nonlocal_probs_no_prior.csv")
 
-# summarise across SUI
 # compile all the samples
 samples.null <- rbind(woco.iso.null$samples$chain1,woco.iso.null$samples$chain2,woco.iso.null$samples$chain3,woco.iso.null$samples$chain4)
-out.sui<- as_tibble(samples.null[,grep("p.nonlocal\\[", colnames(samples.null))]) %>%
-  gather(key="parameter",value="p.nonlocal") %>%
-  mutate(age=as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))-1,
-         ctn=as.numeric(str_extract(parameter, "(?<=,)\\s*\\d+"))) %>%
-  mutate(ctn=unique(woco.unk.sf$KANTON)[ctn]) %>%
+## different way to calculate leads to same result
+# mean.p.nonlocal.null <- as_tibble(samples.null[,grep("p.nonlocal\\[", colnames(samples.null))]) %>%
+#   gather(key="parameter",value="p.nonlocal") %>%
+#   mutate(age=as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))-1,
+#          ctn=as.numeric(str_extract(parameter, "(?<=,)\\s*\\d+"))) %>%
+#   mutate(prior="only migration") %>%
+#   group_by(age,ctn,prior) %>%
+#   summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
+#   mutate(Age=ifelse(age==1,"Adult","Juvenile"))
+
+
+
+
+
+
+# summarise across SUI -
+# this averages across cantons and therefore leads to a mismatching proportion when later also reporting certainties of individuals,
+# because all cantons are weighted equally and uncertainty of cantons with low n have disproportionate influence!
+# out.sui<- as_tibble(samples.null[,grep("p.nonlocal\\[", colnames(samples.null))]) %>%
+#   gather(key="parameter",value="p.nonlocal") %>%
+#   mutate(age=as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))-1,
+#          ctn=as.numeric(str_extract(parameter, "(?<=,)\\s*\\d+"))) %>%
+#   mutate(ctn=unique(woco.unk.sf$KANTON)[ctn]) %>%
+#   group_by(age) %>%
+#   summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
+#   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+#   select(-age)  %>%
+#   mutate(prior="uninformative prior") 
+
+out.sui<- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
+  gather(key="parameter",value="z") %>%
+  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+  mutate(age=iso.constants$age.unknown[ind]) %>%
+  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+  group_by(age,ctn,ind) %>%
+  summarise(state=mean(z)) %>%
+  ungroup() %>%
   group_by(age) %>%
-  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
+  summarise(foreign.med=median(state),foreign.lcl=quantile(state,0.025), foreign.ucl=quantile(state,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   select(-age)  %>%
   mutate(prior="uninformative prior") %>%
@@ -738,7 +769,7 @@ prop.cert %>% arrange(age, prior) %>% print(n=20)
 
 # mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
 # mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
-
+# mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
 
 
 
