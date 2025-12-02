@@ -372,21 +372,21 @@ out.ctn
 
 
 ## 4.2 summarise assignment certainty across individuals ------------------------------------------
-prop.cert <- as_tibble(samples[,grep("z\\[", colnames(samples))]) %>%
-  gather(key="parameter",value="z") %>%
-  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
-  mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
-  group_by(age,ctn,ind) %>%
-  summarise(state=mean(z)) %>%
-  ungroup() %>%
-  mutate(cert.local=ifelse(state<0.25,1,0)) %>%
-  mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
-  group_by(age) %>%
-  summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
-  mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
-  mutate(prior="combined abundance and migration")
-
+# prop.cert <- as_tibble(samples[,grep("z\\[", colnames(samples))]) %>%
+#   gather(key="parameter",value="z") %>%
+#   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+#   mutate(age=iso.constants$age.unknown[ind]) %>%
+#   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+#   group_by(age,ctn,ind) %>%
+#   summarise(state=mean(z)) %>%
+#   ungroup() %>%
+#   mutate(cert.local=ifelse(state<0.25,1,0)) %>%
+#   mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
+#   group_by(age) %>%
+#   summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
+#   mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
+#   mutate(prior="combined abundance and migration")
+# 
 
   
   
@@ -529,22 +529,22 @@ out.ctn
 
 
 
-## 5.5 summarise assignment certainty across individuals ------------------------------------------
-prop.cert <- as_tibble(samples.migprior[,grep("z\\[", colnames(samples.migprior))]) %>%
-  gather(key="parameter",value="z") %>%
-  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
-  mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
-  group_by(age,ctn,ind) %>%
-  summarise(state=mean(z)) %>%
-  ungroup() %>%
-  mutate(cert.local=ifelse(state<0.25,1,0)) %>%
-  mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
-  group_by(age) %>%
-  summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
-  mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
-  mutate(prior="only migration") %>%
-  bind_rows(prop.cert)
+# ## 5.5 summarise assignment certainty across individuals ------------------------------------------
+# prop.cert <- as_tibble(samples.migprior[,grep("z\\[", colnames(samples.migprior))]) %>%
+#   gather(key="parameter",value="z") %>%
+#   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+#   mutate(age=iso.constants$age.unknown[ind]) %>%
+#   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+#   group_by(age,ctn,ind) %>%
+#   summarise(state=mean(z)) %>%
+#   ungroup() %>%
+#   mutate(cert.local=ifelse(state<0.25,1,0)) %>%
+#   mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
+#   group_by(age) %>%
+#   summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
+#   mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
+#   mutate(prior="only migration") %>%
+#   bind_rows(prop.cert)
 
 
 
@@ -678,6 +678,7 @@ mean.p.nonlocal.null <- as_tibble(out[grep("p.nonlocal\\[", out$parameter),]) %>
          ctn=as.numeric(str_extract(parameter, "(?<=,)\\s*\\d+"))) %>%
   mutate(ctn=unique(woco.unk.sf$KANTON)[ctn]) %>%
   mutate(prior="uninformative prior") %>%
+  dplyr::filter(!(ctn=="VS" & age==0)) %>% ### this is just the prior because no data exist from VS juveniles
   select(age,ctn,prior,median, lcl,ucl) %>%
   rename(for.med=median,for.ucl=ucl, for.lcl=lcl)
 fwrite(mean.p.nonlocal.null,"output/WOCO_nonlocal_probs_no_prior.csv")
@@ -702,36 +703,51 @@ samples.null <- rbind(woco.iso.null$samples$chain1,woco.iso.null$samples$chain2,
 # summarise across SUI -
 # this averages across cantons and therefore leads to a mismatching proportion when later also reporting certainties of individuals,
 # because all cantons are weighted equally and uncertainty of cantons with low n have disproportionate influence!
-# out.sui<- as_tibble(samples.null[,grep("p.nonlocal\\[", colnames(samples.null))]) %>%
-#   gather(key="parameter",value="p.nonlocal") %>%
-#   mutate(age=as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))-1,
-#          ctn=as.numeric(str_extract(parameter, "(?<=,)\\s*\\d+"))) %>%
-#   mutate(ctn=unique(woco.unk.sf$KANTON)[ctn]) %>%
-#   group_by(age) %>%
-#   summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
-#   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-#   select(-age)  %>%
-#   mutate(prior="uninformative prior") 
-
-out.sui<- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
-  gather(key="parameter",value="z") %>%
-  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
-  mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
-  group_by(age,ctn,ind) %>%
-  summarise(state=mean(z)) %>%
-  ungroup() %>%
+#re-instated as it appropriately captures uncertainty of small sample size
+out.sui<- as_tibble(samples.null[,grep("p.nonlocal\\[", colnames(samples.null))]) %>%
+  gather(key="parameter",value="p.nonlocal") %>%
+  mutate(age=as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))-1,
+         ctn=as.numeric(str_extract(parameter, "(?<=,)\\s*\\d+"))) %>%
+  mutate(ctn=unique(woco.unk.sf$KANTON)[ctn]) %>%
   group_by(age) %>%
-  summarise(foreign.med=median(state),foreign.lcl=quantile(state,0.025), foreign.ucl=quantile(state,0.975)) %>%
+  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975)) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   select(-age)  %>%
   mutate(prior="uninformative prior") %>%
   bind_rows(out.sui)
+
+# out.sui<- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
+#   gather(key="parameter",value="z") %>%
+#   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+#   mutate(age=iso.constants$age.unknown[ind]) %>%
+#   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+#   group_by(age,ctn,ind) %>%
+#   summarise(state=mean(z)) %>%
+#   ungroup() %>%
+#   group_by(age) %>%
+#   summarise(foreign.med=median(state),foreign.lcl=quantile(state,0.025), foreign.ucl=quantile(state,0.975)) %>%
+#   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+#   select(-age)  %>%
+  # mutate(prior="uninformative prior") %>%
+  # bind_rows(out.sui)
 out.sui  
 fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
 
 
 # summarise by Canton
+# as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
+#   gather(key="parameter",value="z") %>%
+#   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+#   mutate(age=iso.constants$age.unknown[ind]) %>%
+#   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+#   group_by(age,ctn,ind) %>%
+#   summarise(state=mean(z)) %>%
+#   ungroup() %>%
+#   group_by(age,ctn) %>%
+#   summarise(foreign.med=median(state),foreign.lcl=quantile(state,0.025), foreign.ucl=quantile(state,0.975)) %>%
+#   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+#   select(-age)  %>%
+#   mutate(prior="uninformative prior")
 
 out.ctn<- mean.p.nonlocal.null %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
@@ -744,22 +760,22 @@ fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_no_prior.csv")
 
 
 ## 6.5 summarise assignment certainty across individuals ------------------------------------------
-prop.cert <- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
-  gather(key="parameter",value="z") %>%
-  mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
-  mutate(age=iso.constants$age.unknown[ind]) %>%
-  mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
-  group_by(age,ctn,ind) %>%
-  summarise(state=mean(z)) %>%
-  ungroup() %>%
-  mutate(cert.local=ifelse(state<0.25,1,0)) %>%
-  mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
-  group_by(age) %>%
-  summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
-  mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
-  mutate(prior="uninformative prior") %>%
-  bind_rows(prop.cert)
-fwrite(prop.cert,"output/woco_assignment_certainty_proportions.csv")
+# prop.cert <- as_tibble(samples.null[,grep("z\\[", colnames(samples.null))]) %>%
+#   gather(key="parameter",value="z") %>%
+#   mutate(ind=as.numeric(str_extract(parameter,pattern="\\d+"))) %>%
+#   mutate(age=iso.constants$age.unknown[ind]) %>%
+#   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
+#   group_by(age,ctn,ind) %>%
+#   summarise(state=mean(z)) %>%
+#   ungroup() %>%
+#   mutate(cert.local=ifelse(state<0.25,1,0)) %>%
+#   mutate(cert.nonlocal=ifelse(state>0.75,1,0)) %>%
+#   group_by(age) %>%
+#   summarise(n=length(unique(ind)),n.local=sum(cert.local),n.nonlocal=sum(cert.nonlocal)) %>%
+#   mutate(prop.cert.local=n.local/n,prop.cert.nonlocal=n.nonlocal/n) %>%
+#   mutate(prior="uninformative prior") %>%
+#   bind_rows(prop.cert)
+# fwrite(prop.cert,"output/woco_assignment_certainty_proportions.csv")
 
 
 prop.cert %>% arrange(age, prior) %>% print(n=20)
@@ -780,6 +796,7 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   group_by(age,ctn, prior) %>%
   summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
   bind_rows(mean.p.nonlocal.null) %>%
+  mutate(prior=factor(prior, levels=c("only migration","combined abundance and migration","uninformative prior"))) %>%
   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
   #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
   
@@ -810,7 +827,7 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
         legend.position="inside",
         legend.key = element_rect(fill = NA, color = NA),
         legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.90,0.6),
+        legend.position.inside=c(0.87,0.93),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE2
