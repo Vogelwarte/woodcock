@@ -29,6 +29,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(gridExtra)
 library(tidyterra)
+library(cowplot)
 filter<-dplyr::filter
 select<-dplyr::select
 
@@ -141,7 +142,157 @@ fwrite(TableS2,"manuscript/Table_S2.csv")
 
 
 
-# 2. FIGURE S1 ---------------
+
+
+
+# 2. FIGURE 1 ---------------
+
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
+
+FIGURE1<-woco_mig %>% 
+  group_by(week) %>%
+  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% #print(n=35)
+  
+  ggplot()+
+  geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
+  geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
+
+  ### add vertical lines to specify key dates OF OLD HUNTING TIMES
+  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
+  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-12-15"),y=0,yend=0.6, col="grey27", linewidth=1) +
+  # geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
+  # geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
+  # geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
+  # 
+  
+  ### add the bird icons
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
+  
+  
+  ## format axis ticks
+  scale_x_date(name="Week of the year", date_labels = "%d %b") +
+  scale_y_continuous(name="Cumulative proportion that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURE1
+
+ggsave(plot=FIGURE1,
+       filename="manuscript/Figure_1.jpg", 
+       device="jpg",width=11, height=8)
+
+
+
+
+## 2.1. CALCULATE ANNUAL SURVIVAL ---------
+out<-fread("output/woco_telemetry_seasonal_surv_parm.csv")
+out %>% filter(startsWith(parameter,"mean.phi")) %>%
+  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
+  select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
+  slice_min(median) 
+out %>% filter(startsWith(parameter,"mean.phi")) %>%
+  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
+  select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
+  slice_max(median) 
+
+
+
+# 3. FIGURE 2 ---------------
+
+mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
+mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
+mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
+
+
+
+# mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
+# mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
+# mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
+
+
+
+FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn, prior) %>%
+  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  bind_rows(mean.p.nonlocal.null) %>%
+  mutate(prior=factor(prior, levels=c("only migration","combined abundance and migration","uninformative prior"))) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  facet_wrap(~prior, ncol = 1) +
+  
+  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
+  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
+  
+  ## format axis ticks
+  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.87,0.93),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURE2
+
+ggsave(plot=FIGURE2,
+       filename="manuscript/Figure_2.jpg", 
+       device="jpg",width=9, height=12, dpi=600)
+
+
+
+
+
+### extrapolating annual harvest total of Swiss population
+
+npairs<-c(1000,4000) ## from Knaus 2018
+sexratio<-0.5
+productivity<-1.6 ## from Kramer et al. 2019: https://www.sciencedirect.com/science/article/pii/S0006320718314149
+shot<-1820
+tot.birds<-(npairs/sexratio)+npairs*productivity
+
+bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(prior) %>%
+  summarise(for.lcl=quantile(p.nonlocal.mean,0.025), for.ucl=quantile(p.nonlocal.mean,0.975)) %>%
+  mutate(min=(1-for.ucl)*shot/tot.birds[2], max=(1-for.lcl)*shot/tot.birds[1])
+
+
+
+
+
+
+# 4. FIGURE S1 ---------------
 medlast<-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
   filter(Ort=="UG") %>%
   mutate(year=year(Datum)) %>%
@@ -180,142 +331,8 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
 
 
 
-# 3. FIGURE 1 ---------------
 
-woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
-
-FIGURE1<-woco_mig %>% 
-  group_by(week) %>%
-  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
-  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% #print(n=35)
-  
-  ggplot()+
-  geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
-  geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
-
-  ### add vertical lines to specify key dates OF OLD HUNTING TIMES
-  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
-  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
-  geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
-  geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
-  # geom_text(x=lubridate::ymd("2024-09-15"),y=0.65,label = "JU\nNE", size=6,col="grey36", vjust = 'bottom')+
-  # geom_text(x=lubridate::ymd("2024-10-01"),y=0.65,label = "BE\nVS", size=6,col="grey27", vjust = 'bottom')+
-  # geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
-  # 
-  
-  ### add the bird icons
-  annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
-  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
-  
-  
-  ## format axis ticks
-  scale_x_date(name="Week of the year", date_labels = "%d %b") +
-  scale_y_continuous(name="Cumulative proportion that have left study area", limits=c(0,1), breaks=seq(0,1,0.2)) +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=14, color="black"),
-        axis.text.x=element_text(size=14, color="black"), 
-        axis.title=element_text(size=18),
-        strip.background=element_rect(fill="white", colour="black"))
-FIGURE1
-
-ggsave(plot=FIGURE1,
-       filename="manuscript/Figure_1.jpg", 
-       device="jpg",width=11, height=8)
-
-
-
-
-## 3.1. CALCULATE ANNUAL SURVIVAL ---------
-out<-fread("output/woco_telemetry_seasonal_surv_parm.csv")
-out %>% filter(startsWith(parameter,"mean.phi")) %>%
-  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
-  select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
-  slice_min(median) 
-out %>% filter(startsWith(parameter,"mean.phi")) %>%
-  mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
-  select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
-  slice_max(median) 
-
-
-
-# 4. FIGURE 2 ---------------
-
-mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
-mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
-
-
-FIGURE2<-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
-  group_by(age,ctn,ind, prior) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
-  group_by(age,ctn, prior) %>%
-  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
-  
-  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
-  
-  ggplot(aes(x=ctn, y=for.med))+
-  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
-  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  facet_wrap(~prior, ncol = 1) +
-  
-  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
-  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
-  
-  ## format axis ticks
-  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
-  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=14, color="black"),
-        axis.text.x=element_text(size=14, color="black"),
-        axis.title=element_text(size=16),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=14, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.90,0.61),
-        strip.text=element_text(size=18, color="black"),
-        strip.background=element_rect(fill="white", colour="black"))
-FIGURE2
-
-
-ggsave(plot=FIGURE2,
-       filename="manuscript/Figure_2.jpg", 
-       device="jpg",width=8, height=12)
-
-
-
-### extrapolating annual harvest total of Swiss population
-
-npairs<-c(1000,4000) ## from Knaus 2018
-sexratio<-0.5
-productivity<-1.6 ## from Kramer et al. 2019: https://www.sciencedirect.com/science/article/pii/S0006320718314149
-shot<-1820
-tot.birds<-(npairs/sexratio)+npairs*productivity
-
-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
-  group_by(age,ctn,ind, prior) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
-  group_by(prior) %>%
-  summarise(for.lcl=quantile(p.nonlocal.mean,0.025), for.ucl=quantile(p.nonlocal.mean,0.975)) %>%
-  mutate(min=(1-for.ucl)*shot/tot.birds[2], max=(1-for.lcl)*shot/tot.birds[1])
-
-
-
-
-
-# 7. FIGURE S2 ----------------------------------
+# 5. FIGURE S2 ----------------------------------
 load("data/woco.input.data.RData")
 woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
 
@@ -373,7 +390,242 @@ summary(ORIG_WC$dH)
 summary(UNK_WC$dH)
 
 
-# 5. FIGURE S4 -----------------------
+
+
+
+# 6. FIGURE S3 ----------------------------------
+
+ORIG_WC<-woco %>% filter(ORIGINE!="UNBEKANNT") %>%
+  dplyr::filter(!is.na(dH)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE)
+
+## 6.1. add data of known origin provided by andrew Hoodless
+ORIG_WC<-fread("data/WOCO_known_origin_feathers_Hoodless.csv") %>%
+  mutate(ADULTE=ifelse(Age=="Adult",1,0),PROVENANCE_voigt=as.character(LocationCode),
+         AGE=ifelse(Age=="Adult", "Adulte","Juvénile")) %>%
+  mutate(dH=10.774 + (0.852*DHF)) %>%   ## new correction from Soto et al 2017 inserted after discussion with David Soto on 20 Oct 2025
+  rename(ID=RefID, KANTON=Region,
+         DATE=Date,LATITUDE=Latitude,LONGITUDE=Longitude) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,DATE,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+  bind_rows(ORIG_WC)
+dim(ORIG_WC)
+
+## 6.2. create spatial feature for plotting ------
+woco.sf <- ORIG_WC %>%
+  st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs=4326)
+
+
+
+## 6.3. load spatial background data and plot ------
+bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
+EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_crop(bbox) %>%
+  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
+  dplyr::select(admin,name,adm0_a3,geometry)
+
+WOCO.isoscape17<-readRDS("./data/isoscape17.rds") %>%
+  mutate(mean=ifelse(mean==0,NA,mean)) %>%
+  terra::crop(.,bbox)
+plot(WOCO.isoscape17$mean)
+
+FIGURES3<-ggplot() + 
+  tidyterra::geom_spatraster(data=WOCO.isoscape17, aes(fill=mean))+
+  geom_sf(data=woco.sf,color="red") +
+  geom_sf(data=EUR, colour="grey12", fill=NA) +
+  #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
+  scale_fill_gradient(low = 'goldenrod', high = 'darkblue', na.value="white") +
+  labs(fill = expression("Annual mean precipitation " * delta^2 * H)) +
+  
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text=element_text(size=12, color="black"),
+        axis.title=element_blank(),
+        legend.position="inside",
+        legend.position.inside=c(0.5,0.05),
+        legend.direction = "horizontal",
+        legend.background=element_blank(),
+        plot.margin= unit(rep(.5, 4), "lines"),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES3
+
+ggsave(FIGURES3, filename="manuscript/FIGURE_S3.jpg",device="jpg",width=9, height=9)
+
+
+
+
+
+
+
+
+
+# 7. FIGURE S4 ----------------------------------
+
+#### completely revised figure on 26 Nov 2025
+# prepared in WOCO_rainfall_isoscape_creation.r
+load("data/woco.input.data.annual.RData")
+woco.sf<-bind_rows(woco.unk.sf,woco.sf) %>%
+  dplyr::filter(KANTON %in% unique(woco.unk.sf$KANTON))
+
+bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
+SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
+  st_transform(st_crs('EPSG:4326')) # Project to WGS84
+EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_crop(bbox) %>%
+  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
+  dplyr::select(admin,name,adm0_a3,geometry)
+
+woco.countries.orig <- EUR %>%
+  dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+
+WOCO.isoscape02<-readRDS("./data/isoscape02.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape03<-readRDS("./data/isoscape03.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape05<-readRDS("./data/isoscape05.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape07<-readRDS("./data/isoscape07.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape08<-readRDS("./data/isoscape08.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape09<-readRDS("./data/isoscape09.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape10<-readRDS("./data/isoscape10.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape13<-readRDS("./data/isoscape13.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape14<-readRDS("./data/isoscape14.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape15<-readRDS("./data/isoscape15.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape16<-readRDS("./data/isoscape16.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape17<-readRDS("./data/isoscape17.rds") %>%
+  terra::mask(woco.countries.orig)
+WOCO.isoscape18<-readRDS("./data/isoscape18.rds") %>%
+  terra::mask(woco.countries.orig)
+
+
+isoscapes<-list(WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
+                WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17,WOCO.isoscape18)
+
+
+
+
+refscape<-WOCO.isoscape13  ## make sure that all isoscapes have the same extent by setting a reference isoscape
+plot_list <- list()
+for (ct in 1:length(unique(woco.unk.sf$KANTON))){
+  
+  ## get canton-wise distribution
+  woco.cnt <- woco.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
+  cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
+    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) 
+  
+  ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
+  # Your observations (numeric vector)
+  obs <- cnt.iso$d2h_MA
+  probscape<-list()
+  for (l in 1:length(isoscapes)){
+    
+    # Select the layers that hold the mean and (response) variance
+    iso <- isoscapes[[l]][[c("mean", "mean_predVar")]]
+    iso <-  terra::resample(iso,refscape, method="near")
+    
+    # mean probability per cell across all years
+    probscape[[l]] <- terra::app(
+      iso, fun = function(v, obs) {
+        mu  <- v[1]
+        var <- v[2]
+        if (is.na(mu) || is.na(var) || var <= 0) return(NA_real_)
+        sigma <- sqrt(var)
+        mean(pnorm(obs, mean = mu, sd = sigma, lower.tail = FALSE))
+      },
+      obs = obs
+    )
+    
+    names(probscape[[l]])<- "loglik"
+    
+  }
+  
+  CNT.isoscape <-  terra::app(sds(probscape),mean) %>%
+    terra::crop(EUR)
+  
+  ## create plot
+  plot_list[[ct]] <- ggplot(EUR) +
+    geom_sf() +
+    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=loglik))+
+    geom_sf(data=woco.cnt,color="red") +
+    geom_sf(data=EUR, colour="grey12", fill=NA) +
+    #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
+    
+    annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
+    annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
+    scale_fill_gradient(limits=c(0,1), low = 'white', high = 'darkred', na.value="white") +
+    labs(fill = expression("Probability of indistinguishable rainfall " * delta^2 * H)) +
+    
+    
+    ## beautification of the axes
+    theme(panel.background=element_rect(fill="white", colour="black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text=element_text(size=12, color="black"),
+          axis.title=element_blank(),
+          legend.position="inside",
+          legend.position.inside=c(0.5,0.05),
+          legend.direction = "horizontal",
+          legend.background=element_blank(),
+          plot.margin= unit(rep(.5, 4), "lines"),
+          strip.text=element_text(size=18, color="black"),
+          strip.background=element_rect(fill="white", colour="black"))
+  
+} #ct
+
+
+
+
+#FIG_S4<-grid.arrange(grobs=plot_list,ncol=2)
+
+
+
+# Extract the legend from one plot
+legend <- get_legend(plot_list[[1]] + theme(legend.position = "bottom"))
+
+# Remove legends from all plots
+plots_no_legend <- lapply(plot_list, function(p) p + theme(legend.position = "none"))
+
+# Combine plots and legend
+FIG_S4 <- plot_grid(
+  plot_grid(plotlist = plots_no_legend, ncol = 2),
+  legend,
+  ncol = 1,
+  rel_heights = c(1, 0.1)  # Adjust legend height
+)
+
+
+FIG_S4 <- plot_grid(plotlist = plots_no_legend, ncol = 2, align = "none",labels = NULL,label_size = 0 )
+FIG_S4 <- plot_grid(FIG_S4, legend, ncol = 1, rel_heights = c(1, 0.1),rel_widths = c(1,0.5))
+FIG_S4
+
+
+
+ggsave(filename="manuscript/Figure_S4.jpg", plot=FIG_S3,
+       device="jpg",width=10, height=14)
+
+
+
+
+
+
+
+
+
+
+
+# 8. FIGURE S5 -----------------------
 UNK_WC<-woco %>% dplyr::filter(ORIGINE=="unknown") %>%
   dplyr::filter(JAGDT==1) %>%
   dplyr::filter(!is.na(DATE)) %>%
@@ -402,7 +654,7 @@ woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
 
 colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
 
-FIG_s4<-ggplot()+
+FIG_s5<-ggplot()+
   geom_line(data=woco_mig, aes(x=Date, y=mig, color="Local birds"),linewidth=1) +
   geom_line(data=woco_abundance, aes(x=Date, y=abund, color="All birds"),linewidth=1) +
   geom_col(data=woco_shot, aes(x=Date, y=abund, color="Shot birds"),width = 6, alpha=0.5) +
@@ -427,10 +679,10 @@ FIG_s4<-ggplot()+
         legend.background = element_rect(fill = NA, color = NA),
         legend.position.inside=c(0.1,0.5),
         strip.background=element_rect(fill="white", colour="black"))
-FIG_s4
+FIG_s5
 
-ggsave(plot=FIG_s4,
-       filename="manuscript/Figure_S4.jpg",
+ggsave(plot=FIG_s5,
+       filename="manuscript/Figure_S5.jpg",
        device="jpg",width=12, height=8)
 
 
@@ -440,7 +692,101 @@ ggsave(plot=FIG_s4,
 
 
 
-# 7. FIGURE S3 ----------------------------------
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 9. REPORT QUANTITIES IN MANUSCRIPT -------------------------
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# FILTER DATA by removing individuals with no record in Aug - Dec
+
+removals<-woco %>%
+  mutate(targetObs=ifelse(month(Datum)>7,1,0)) %>%
+  group_by(Ring_num) %>%
+  summarise(obs=sum(targetObs)) %>%
+  filter(obs==0)
+
+woco<-woco %>% filter(!(Ring_num %in% removals$Ring_num))
+
+table(woco$Ort)
+table(woco$age)
+hist(month(woco$Datum))
+table(woco$Beobachtung)
+table(woco$Markierung)
+table(woco$Markierung, woco$Sendertyp)
+table(woco$Censor)
+length(unique(woco$Ring_num))
+woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  mutate(jday=yday(Datum)) %>%
+  ggplot(aes(x=jday)) + geom_histogram()
+
+table(woco$Beobachtung, woco$Ort)
+
+
+woco %>% group_by(Ring, Markierung, Sendertyp) %>%
+  summarise(n_encounter=length(Datum)) %>%
+  ungroup() %>%
+  mutate(N=1) %>%
+  group_by(Markierung, Sendertyp) %>%
+  summarise(N_birds=sum(N))
+
+
+
+
+
+
+
+# 10. ABANDONED CODE FOR ALTERNATIVE FIGURES ------------------------------------------
+
+mean.p.nonlocal.null<-fread("output/WOCO_nonlocal_probs_no_prior_featherscape.csv")
+mean.p.nonlocal.migprior<-fwrite("output/WOCO_nonlocal_probs_mig_prior_featherscape.csv")
+mean.p.nonlocal<-fwrite("output/WOCO_nonlocal_probs_featherscape.csv")
+
+
+FIGURES2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn, prior) %>%
+  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  bind_rows(mean.p.nonlocal.null) %>%
+  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
+  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  facet_wrap(~prior, ncol = 1) +
+  
+  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
+  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
+  
+  ## format axis ticks
+  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.90,0.6),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES2
+
+
+
+## ABANDONED CODE FOR PREVIOUS FIG S3 ISOTOPE ORIGIN
+
 # woco<-fread("data/WOCO_isotopes.csv")
 # 
 # woco$dH<-10.774 + (0.852*woco$dH_scaled)
@@ -561,265 +907,7 @@ ggsave(plot=FIG_s4,
 # } #ct
 
 
-#### completely revised figure on 26 Nov 2025
-# prepared in WOCO_rainfall_isoscape_creation.r
-load("data/woco.input.data.annual.RData")
-woco.sf<-bind_rows(woco.unk.sf,woco.sf) %>%
-  dplyr::filter(KANTON %in% unique(woco.unk.sf$KANTON))
 
-
-bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
-SUI <- ne_countries(country = "Switzerland", scale=10, returnclass = "sf") %>% # Countries
-  st_transform(st_crs('EPSG:4326')) # Project to WGS84
-EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
-  st_crop(bbox) %>%
-  st_transform(st_crs('EPSG:4326')) %>% # Project to WGS84
-  dplyr::select(admin,name,adm0_a3,geometry)
-
-woco.countries.orig <- EUR %>%
-  dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
-                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
-
-WOCO.isoscape02<-readRDS("./data/isoscape02.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape03<-readRDS("./data/isoscape03.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape05<-readRDS("./data/isoscape05.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape07<-readRDS("./data/isoscape07.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape08<-readRDS("./data/isoscape08.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape09<-readRDS("./data/isoscape09.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape10<-readRDS("./data/isoscape10.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape13<-readRDS("./data/isoscape13.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape14<-readRDS("./data/isoscape14.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape15<-readRDS("./data/isoscape15.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape16<-readRDS("./data/isoscape16.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape17<-readRDS("./data/isoscape17.rds") %>%
-  terra::mask(woco.countries.orig)
-WOCO.isoscape18<-readRDS("./data/isoscape18.rds") %>%
-  terra::mask(woco.countries.orig)
-
-
-isoscapes<-list(WOCO.isoscape02,WOCO.isoscape03,WOCO.isoscape05,WOCO.isoscape07,WOCO.isoscape08,WOCO.isoscape09,WOCO.isoscape10,
-                WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,WOCO.isoscape17,WOCO.isoscape18)
-
-
-
-
-refscape<-WOCO.isoscape13  ## make sure thzat all have the same extent
-plot_list <- list()
-for (ct in 1:length(unique(woco.unk.sf$KANTON))){
-  
-  ## get canton-wise distribution
-  woco.cnt <- woco.sf %>% dplyr::filter(KANTON==unique(woco.unk.sf$KANTON)[ct]) 
-  cnt.iso <-  woco.cnt %>% st_drop_geometry() %>%
-    dplyr::select(ID,KANTON,d2h_MA,d2h_se_MA) 
-  
-  ## EXTRACT ISOSCAPE CELLS FALLING INTO THIS RANGE
-  # Your observations (numeric vector)
-  obs <- cnt.iso$d2h_MA
-  probscape<-list()
-  for (l in 1:length(isoscapes)){
-    
-    # Select the layers that hold the mean and (response) variance
-    iso <- isoscapes[[l]][[c("mean", "mean_predVar")]]
-    iso <-  terra::resample(iso,refscape, method="near")
-    
-    # Max of probability per cell (robust; avoids underflow)
-    probscape[[l]] <- terra::app(
-      iso,
-      fun = function(v, obs) {
-        mu  <- v[1]
-        var <- v[2]
-        if (is.na(mu) || is.na(var) || var <= 0) return(NA_real_)
-        sigma <- sqrt(var)
-        mean(pnorm(obs, mean = mu, sd = sigma, lower.tail = FALSE))
-      },
-      obs = obs
-    )
-    
-    names(probscape[[l]])<- "loglik"
-    
-  }
-  
-  CNT.isoscape <-  terra::app(sds(probscape),mean) %>%
-    terra::crop(EUR)
-  
-  ## create plot
-  plot_list[[ct]] <- ggplot(EUR) +
-    geom_sf() +
-    tidyterra::geom_spatraster(data=CNT.isoscape, aes(fill=loglik))+
-    geom_sf(data=woco.cnt,color="red") +
-    geom_sf(data=EUR, colour="grey12", fill=NA) +
-    #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
-    
-    annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
-    annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
-    scale_fill_gradient(limits=c(0,1), low = 'white', high = 'darkred', na.value="white") +
-    labs(fill = expression("Probability of indistinguishable rainfall " * delta^2 * H)) +
-    
-    
-    ## beautification of the axes
-    theme(panel.background=element_rect(fill="white", colour="black"),
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          axis.text=element_text(size=12, color="black"),
-          axis.title=element_blank(),
-          legend.position="inside",
-          legend.position.inside=c(0.5,0.05),
-          legend.direction = "horizontal",
-          legend.background=element_blank(),
-          plot.margin= unit(rep(.5, 4), "lines"),
-          strip.text=element_text(size=18, color="black"),
-          strip.background=element_rect(fill="white", colour="black"))
-  
-} #ct
-
-
-
-
-#FIG_S3<-grid.arrange(grobs=plot_list,ncol=2)
-
-
-library(cowplot)
-
-# Extract the legend from one plot
-legend <- get_legend(plot_list[[1]] + theme(legend.position = "bottom"))
-
-# Remove legends from all plots
-plots_no_legend <- lapply(plot_list, function(p) p + theme(legend.position = "none"))
-
-# Combine plots and legend
-FIG_S3 <- plot_grid(
-  plot_grid(plotlist = plots_no_legend, ncol = 2),
-  legend,
-  ncol = 1,
-  rel_heights = c(1, 0.1)  # Adjust legend height
-)
-
-
-FIG_S3 <- plot_grid(plotlist = plots_no_legend, ncol = 2, align = "none",labels = NULL,label_size = 0 )
-FIG_S3 <- plot_grid(FIG_S3, legend, ncol = 1, rel_heights = c(1, 0.1),rel_widths = c(1,0.5))
-FIG_S3
-
-
-
-ggsave(filename="manuscript/Figure_S3_new.jpg", plot=FIG_S3,
-       device="jpg",width=10, height=14)
-
-
-
-
-
-
-
-
-# FIGURE S2 ------------------------------------------
-
-mean.p.nonlocal.null<-fread("output/WOCO_nonlocal_probs_no_prior_featherscape.csv")
-mean.p.nonlocal.migprior<-fwrite("output/WOCO_nonlocal_probs_mig_prior_featherscape.csv")
-mean.p.nonlocal<-fwrite("output/WOCO_nonlocal_probs_featherscape.csv")
-
-
-FIGURES2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
-  group_by(age,ctn,ind, prior) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
-  group_by(age,ctn, prior) %>%
-  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
-  bind_rows(mean.p.nonlocal.null) %>%
-  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
-  
-  ggplot(aes(x=ctn, y=for.med))+
-  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
-  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  facet_wrap(~prior, ncol = 1) +
-  
-  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
-  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
-  
-  ## format axis ticks
-  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
-  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=14, color="black"),
-        axis.text.x=element_text(size=14, color="black"),
-        axis.title=element_text(size=16),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=14, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.90,0.6),
-        strip.text=element_text(size=18, color="black"),
-        strip.background=element_rect(fill="white", colour="black"))
-FIGURES2
-
-
-
-
-
-
-
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# FILTER DATA by removing individuals with no record in Aug - Dec
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-removals<-woco %>%
-  mutate(targetObs=ifelse(month(Datum)>7,1,0)) %>%
-  group_by(Ring_num) %>%
-  summarise(obs=sum(targetObs)) %>%
-  filter(obs==0)
-
-woco<-woco %>% filter(!(Ring_num %in% removals$Ring_num))
-
-
-
-
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# REPORT QUANTITIES IN MANUSCRIPT
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-# Inspect data ---------------------------------------------------------------
-table(woco$Ort)
-table(woco$age)
-hist(month(woco$Datum))
-table(woco$Beobachtung)
-table(woco$Markierung)
-table(woco$Markierung, woco$Sendertyp)
-table(woco$Censor)
-length(unique(woco$Ring_num))
-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
-  mutate(jday=yday(Datum)) %>%
-  ggplot(aes(x=jday)) + geom_histogram()
-
-table(woco$Beobachtung, woco$Ort)
-
-
-woco %>% group_by(Ring, Markierung, Sendertyp) %>%
-  summarise(n_encounter=length(Datum)) %>%
-  ungroup() %>%
-  mutate(N=1) %>%
-  group_by(Markierung, Sendertyp) %>%
-  summarise(N_birds=sum(N))
 
 
 
