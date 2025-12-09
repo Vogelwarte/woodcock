@@ -232,7 +232,7 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
   
   ggplot(aes(x=ctn, y=for.med))+
-  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_point(aes(col=Age, shape=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
   facet_wrap(~prior, ncol = 1) +
   
@@ -240,8 +240,14 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
   
   ## format axis ticks
-  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
+  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="", shape="") +
   scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  # viridis discrete color scale (cividis is very color-blind friendly)
+  scale_color_viridis_d(option = "cividis", end = 0.9) +
+  # complementary shapes for Age (helps in grayscale/print)
+  scale_shape_manual(values = c("Adult" = 16, "Juvenile" = 17)) + # 16 = solid circle, 17 = solid triangle
+  
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
@@ -360,6 +366,8 @@ FIGURES2<-woco %>%
        x=expression(paste(delta^{2}, "H (\u2030)")),
        col="Origin", fill="Origin") +
   scale_y_continuous(labels = scales::percent_format(scale=100)) +
+  # viridis discrete color scale (cividis is very color-blind friendly)
+  scale_fill_viridis_d(option = "cividis", end = 0.9) +
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
@@ -564,7 +572,10 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
     
     annotation_custom(wocoicon, xmin=-10, xmax=5, ymin=65, ymax=78) +
     annotate("text", x = 35, y = 75, label = unique(woco.unk.sf$KANTON)[ct], size=8, colour="darkolivegreen") +
-    scale_fill_gradient(limits=c(0,1), low = 'white', high = 'darkred', na.value="white") +
+    #scale_fill_gradient(limits=c(0,1), low = 'white', high = 'darkred', na.value="white") +
+    #scale_fill_gradient(limits=c(0,1), low = 'white', high = 'darkred', na.value="white") +
+    scale_fill_viridis_b(begin=0,end=1, alpha=0.8, option="E", direction=-1, na.value="white", n.breaks=7) +
+    
     labs(fill = expression("Probability of indistinguishable rainfall " * delta^2 * H)) +
     
     
@@ -652,11 +663,12 @@ woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
   mutate(abund=N/max(N)) %>%
   mutate(Date=as.Date(Date-years(1)))
 
-colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
+#colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
+colors <- c("All birds" = "#0C7BDC", "Local birds" = "#FFC20A", "Shot birds" = "gray23")
 
 FIG_s5<-ggplot()+
-  geom_line(data=woco_mig, aes(x=Date, y=mig, color="Local birds"),linewidth=1) +
-  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="All birds"),linewidth=1) +
+  geom_line(data=woco_mig, aes(x=Date, y=mig, color="Local birds"),linewidth=2) +
+  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="All birds"),linewidth=2) +
   geom_col(data=woco_shot, aes(x=Date, y=abund, color="Shot birds"),width = 6, alpha=0.5) +
   labs(color = "Origin") +
   scale_color_manual(values = colors) +
