@@ -579,19 +579,21 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
     labs(fill = expression("Probability of indistinguishable rainfall " * delta^2 * H)) +
     
     
-    ## beautification of the axes
-    theme(panel.background=element_rect(fill="white", colour="black"),
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          axis.text=element_text(size=12, color="black"),
-          axis.title=element_blank(),
-          legend.position="inside",
-          legend.position.inside=c(0.5,0.05),
-          legend.direction = "horizontal",
-          legend.background=element_blank(),
-          plot.margin= unit(rep(.5, 4), "lines"),
-          strip.text=element_text(size=18, color="black"),
-          strip.background=element_rect(fill="white", colour="black"))
+    # Important: remove expansion and keep tight
+    coord_sf(expand = FALSE) +
+    # Streamlined theme to reduce space
+    theme(
+      panel.background = element_blank(),   # remove box fill
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text = element_text(size = 12, color = "black"),
+      axis.title = element_blank(),
+      legend.position = "none",             # we'll collect legend outside
+      plot.margin = unit(rep(1, 4), "pt"),  # very tight outer margins
+      strip.text = element_text(size = 18, color = "black"),
+      strip.background = element_rect(fill = "white", colour = "black")
+    )
+  
   
 } #ct
 
@@ -605,25 +607,79 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
 # Extract the legend from one plot
 legend <- get_legend(plot_list[[1]] + theme(legend.position = "bottom"))
 
-# Remove legends from all plots
-plots_no_legend <- lapply(plot_list, function(p) p + theme(legend.position = "none"))
+# # Remove legends from all plots
+# plots_no_legend <- lapply(plot_list, function(p) p + theme(legend.position = "none"))
+
+# Make margins small and panel spacing minimal for all plots
+plots_tight <- lapply(plot_list, function(p) {
+  p +
+    theme(
+      legend.position = "none",
+      plot.margin   = margin(0, 0, 2, 2),         # tight outer margins (in pts)
+      panel.spacing = unit(0, "lines")            # no internal panel spacing
+    )
+})
+
+
+
+# Helper themes to quickly drop axes
+drop_x <- theme(
+  axis.title.x = element_blank(),
+  axis.text.x  = element_blank(),
+  axis.ticks.x = element_blank()
+)
+
+drop_y <- theme(
+  axis.title.y = element_blank(),
+  axis.text.y  = element_blank(),
+  axis.ticks.y = element_blank()
+)
+
+# Apply axis suppression by position in the 2-column grid
+plots_axes <- lapply(seq_along(plots_tight), function(i) {
+  p <- plots_tight[[i]]
+  
+  # Determine row (1..3) and column (1..2)
+  row <- ceiling(i / 2)
+  col <- ifelse(i %% 2 == 0, 2, 1)
+  
+  # Drop x-axis for rows 1 and 2 (keep only bottom row)
+  if (row < 3) p <- p + drop_x
+  
+  # Drop y-axis for right column (keep only left column)
+  if (col == 2) p <- p + drop_y
+  
+  p
+})
+
 
 # Combine plots and legend
+
+
+# Combine 6 panels into a 2x3 grid
+grid_panels <- plot_grid(
+  plotlist = plots_axes,
+  ncol = 2,
+  align = "hv",       # helps align plotting areas
+  labels = NULL
+)
+
+
 FIG_S4 <- plot_grid(
-  plot_grid(plotlist = plots_no_legend, ncol = 2),
+  grid_panels,
   legend,
   ncol = 1,
   rel_heights = c(1, 0.1)  # Adjust legend height
 )
 
 
-FIG_S4 <- plot_grid(plotlist = plots_no_legend, ncol = 2, align = "none",labels = NULL,label_size = 0 )
-FIG_S4 <- plot_grid(FIG_S4, legend, ncol = 1, rel_heights = c(1, 0.1),rel_widths = c(1,0.5))
+# FIG_S4 <- plot_grid(plotlist = plots_no_legend, ncol = 2, align = "none",labels = NULL,label_size = 0 )
+# FIG_S4 <- plot_grid(FIG_S4, legend, ncol = 1, rel_heights = c(1, 0.1),rel_widths = c(1,0.5))
 FIG_S4
 
 
 
-ggsave(filename="manuscript/Figure_S4.jpg", plot=FIG_S3,
+ggsave(filename="manuscript/Figure_S4.jpg", plot=FIG_S4,
        device="jpg",width=10, height=14)
 
 
