@@ -36,37 +36,14 @@ load("data/woco.input.data.annual.RData")
 # try(rm(isoscape, globcover), silent=T)
 # ignore the error referring to C++ https://github.com/keblu/MSGARCH/issues/48
 
-## 1.1. modify data to include abundance predictions from Ornitho.ch records ----------
-## this approach is intended to address the dilution effect (when local birds are outnumbered by migrants)
 
-woco.unk.abd.prior <- woco.unk.sf %>%
-  st_drop_geometry() %>%
-  mutate(DAY=yday(feather_sampling_date), DAY_2=(yday(feather_sampling_date)^2))
-
-woco_abundance <- woco_abundance %>%
-  mutate(DAY=yday(Date), DAY_2=(yday(Date)^2)) %>%
-  dplyr::filter(DAY >= min(woco.unk.abd.prior$DAY)) %>%
-  dplyr::filter(DAY <= max(woco.unk.abd.prior$DAY))
-
-
-m2<-glm(SOPM ~ DAY + DAY_2, data = woco_abundance, family = "poisson")
-#m2<-loess(SOPM ~ DAY, data = woco_abundance, family = "poisson")
-woco.unk.sf$abd_prior <- predict(m2, newdat=woco.unk.abd.prior, type="response")  ## this is the index of abundance over time - if many woodcocks are there the probability of harvesting a local one is smaller
-woco.unk.sf$abd_prior <- woco.unk.sf$abd_prior/ceiling(max(woco.unk.sf$abd_prior)) ## scale to a proportion, but round up maximum because beta prior cannot take values of 1
-summary(woco.unk.sf$abd_prior)
-hist(woco.unk.sf$abd_prior)
-
-ggplot(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
-  geom_point(data=woco_abundance, aes(x=DAY, y=SOPM/max(SOPM))) +
-  geom_smooth(method=loess, se=T) +
-  geom_line(data=woco.unk.sf, aes(x=yday(feather_sampling_date),y=abd_prior), col="firebrick")
+woco.unk <- woco.unk.sf %>%
+  st_drop_geometry()
 
 
 ## to get initial values right
 ISO_CALIB<-lm(dH~d2h_MA+AGE, data=woco.sf)
 summary(ISO_CALIB)
-
-
 
 
 bbox <- st_sfc(st_point(c(-12, 35)), st_point(c(45, 75)), crs = 4326) %>% st_bbox()
@@ -79,7 +56,7 @@ EUR <- ne_countries(scale = "medium", returnclass = "sf") %>%
 
 woco.countries.orig <- EUR %>%
   dplyr::filter(admin %in% c("Ukraine","Sweden","Slovakia","Poland","Norway","Netherlands","Russia","Moldova","Luxembourg","Lithuania","Liechtenstein","Latvia",
-                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium"))
+                             "Germany","Finland","Estonia","Denmark","Czechia","Belarus","Austria","Belgium","Switzerland"))
 
 WOCO.isoscape13<-readRDS("./data/isoscape13.rds") %>%
   terra::mask(woco.countries.orig)
@@ -101,23 +78,37 @@ isoscapes<-list(WOCO.isoscape13,WOCO.isoscape14,WOCO.isoscape15,WOCO.isoscape16,
 # 2. SPECIFY COMBINED PROBABILITY MODEL TO ESTIMATE PROBABILITY OF LOCAL ORIGIN IN NIMBLE ----------------------------------------------
 
 ## concept of approach
-for (f in 1:842) {  ## loop across all feathers
+outscape<-WOCO.isoscape17 %>% mutate(N=0)
+for (f in 1:dim(woco.unk.sf)[1]) {  ## loop across all feathers
   
-  x<-woco.unk.sf$dH[f]
+  x<-woco.unk[f]
   iscape<-isoscapes[[woco.unk.sf$Year[f]-2012]]
-  for(n in 1:ncells(iscape)) {
-    
-    xr<- predict(ISO_CALIB,x)
-    pnorm(x, mean = iscape$dH[n], sd = sigma, lower.tail = FALSE)
-    
-    
-  }
+  iscape$mean<-predict(ISO_CALIB,newdat=data.frame(d2h_MA=as.vector(iscape$mean),AGE=x$AGE)) ### convert to feather isotopes with equation above
   
+  p_prob <- app(iscape[[c("mean", "mean_predVar")]], fun = function(vals) {
+  # vals is a matrix: nrows = number of cells in the chunk, ncols = number of layers (2 here)
+  m <- as.matrix(vals)[, 1]
+  v <- as.matrix(vals)[, 2]
   
+  # Keep variance non-negative, compute sd vectorized
+  sd <- sqrt(pmax(v, 0))
   
+  # Compute pnorm vectorized; returns a vector of same length as m
+  res <- pnorm(x$dH, mean = m, sd = sd)
   
+  # Optional: mark invalid sd as NA (vectorized)
+  bad <- (sd == 0) | is.na(sd)
+  res[bad] <- NA_real_
   
+  # Must return a numeric vector with length equal to nrow  # Must return a numeric vector with length equal to nrow(vals)
+  res
   
+})
+
+  ### APPLY THE 2:1 RATIONALE OF HOBSON AS ORIGIN 1 or 0
+  
+  thresh<-quantile(as.vector(p_prob),0.333, na.rm=T)
+  outscape$N<-as.vector(outscape$N) + as.vector(ifelse(as.vector(p_prob)>thresh,1,0))
 }
 
 
