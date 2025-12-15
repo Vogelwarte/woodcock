@@ -435,14 +435,17 @@ WOCO.isoscape17<-readRDS("./data/isoscape17.rds") %>%
   mutate(mean=ifelse(mean==0,NA,mean)) %>%
   terra::crop(.,bbox)
 plot(WOCO.isoscape17$mean)
+range(WOCO.isoscape17$mean)
 
 FIGURES3<-ggplot() + 
   tidyterra::geom_spatraster(data=WOCO.isoscape17, aes(fill=mean))+
-  geom_sf(data=woco.sf,color="red") +
+  geom_sf(data=woco.sf,color="firebrick") +
   geom_sf(data=EUR, colour="grey12", fill=NA) +
   #ggtitle(unique(woco.unk.sf$KANTON)[ct]) +
-  scale_fill_gradient(low = 'goldenrod', high = 'darkblue', na.value="white") +
-  labs(fill = expression("Annual mean precipitation " * delta^2 * H)) +
+  #scale_fill_gradient(low = 'goldenrod', high = 'darkblue', na.value="white") +
+  scale_fill_viridis_c(begin=0,end=1, option="E", alpha=0.8, direction=-1, na.value="white", n.breaks=6) +
+  
+  labs(fill = expression("Annual mean precipitation " * delta^2 * H * " (‰)")) +
   
   
   ## beautification of the axes
