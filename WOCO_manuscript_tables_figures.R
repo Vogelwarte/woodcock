@@ -5,6 +5,8 @@
 ## written by Steffen Oppel on 25 Sept 2025
 ## creating tables and figures for manuscript by loading in output from models and raw data
 
+## added German figures for MAT presentation
+
 
 # Clear workspace ---------------------------------------------------------
 
@@ -805,7 +807,176 @@ woco %>% group_by(Ring, Markierung, Sendertyp) %>%
 
 
 
-# 10. ABANDONED CODE FOR ALTERNATIVE FIGURES ------------------------------------------
+
+
+
+# 10. FIGURES FOR MAT IN GERMAN ---------------
+
+
+## 10.1. departure timing ----
+
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
+
+woco_mig %>% 
+  group_by(week) %>%
+  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% #print(n=35)
+  
+  ggplot()+
+  geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.4, fill="#0C7BDC") +   ##
+  geom_line(aes(x=Date, y=mig),linewidth=1, col="#0C7BDC")+     ##
+  
+
+  ### add the bird icons
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
+  
+  
+  ## format axis ticks
+  scale_x_date(name="Woche im Jahr", date_labels = "%d %b") +
+  scale_y_continuous(name="Anteil Waldschnepfen die abgezogen sind", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major = element_line(color="lightgray"),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        strip.background=element_rect(fill="white", colour="black"))
+
+
+
+## 10.2. phenology ----
+load("data/woco.input.data.RData")
+woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
+UNK_WC<-woco %>% dplyr::filter(ORIGINE=="unknown") %>%
+  dplyr::filter(JAGDT==1) %>%
+  dplyr::filter(!is.na(DATE)) %>%
+  dplyr::filter(!is.na(dH)) %>%
+  mutate(Date=lubridate::parse_date_time(x=DATE,orders="dmy", tz = "UTC", drop=T)) %>%
+  dplyr::select(ID,ADULTE,AGE,KANTON,Date,dH,PROVENANCE_voigt,LATITUDE,LONGITUDE) %>%
+  rename(DATE=Date)
+UNK_WC$ID<-str_replace_all(UNK_WC$ID, "[^[:alnum:]]", " ")
+
+woco_mig<-readRDS("output/woco_mig_depart_simulation.rds") %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  mutate(prop.remain=1-prop_mig) %>% 
+  group_by(week, Date) %>%
+  summarise(mig=quantile(prop.remain,0.5),mig.lcl=quantile(prop.remain,0.025),mig.ucl=quantile(prop.remain,0.975))
+
+woco_abundance<-fread("data/AnnualPhenology_abundance_index.csv") %>%
+  mutate(Date=lubridate::ymd("2023-12-27") + lubridate::days(Pentade*5)) %>%
+  mutate(abund=SOPM/max(SOPM)) %>%
+  dplyr::filter(Date>=min(woco_mig$Date))
+
+shot_dates<-hist(lubridate::yday(UNK_WC$DATE), breaks=seq(250,365,7),plot=F)
+woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
+  mutate(Date=parse_date_time(as.integer(yday), orders="j")) %>%
+  mutate(abund=N/max(N)) %>%
+  mutate(Date=as.Date(Date-years(1)))
+
+#colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
+colors <- c("Abundanz (ornitho.de)" = "#FFC20A", "Lokale Vögel (Telemetrie)" = "#0C7BDC", "Abschusszahlen" = "gray23")
+
+ggplot()+
+  geom_line(data=woco_mig, aes(x=Date, y=mig, color="Lokale Vögel (Telemetrie)"),linewidth=2) +
+  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="Abundanz (ornitho.de)"),linewidth=2) +
+  geom_col(data=woco_shot, aes(x=Date, y=abund, color="Abschusszahlen"),width = 6, alpha=0.5) +
+  labs(color = "Datensatz") +
+  scale_color_manual(values = colors) +
+  
+  ## format axis ticks
+  scale_x_date(name="Woche im Jahr", date_labels = "%d %b") +
+  scale_y_continuous(name="Relative Häufigkeit der Waldschnepfen", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"), 
+        axis.title=element_text(size=18),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=16, color="black"),
+        legend.text=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.2,0.5),
+        strip.background=element_rect(fill="white", colour="black"))
+
+
+
+## 10.3. proportions ----
+mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
+mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
+
+
+bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+  group_by(age,ctn,ind, prior) %>%
+  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+  ungroup() %>%
+  group_by(age,ctn, prior) %>%
+  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+  mutate(prior=if_else(prior=="only migration","Abzugszeit","Abundanz")) %>%
+  mutate(prior=factor(prior, levels=c("Abzugszeit","Abundanz"))) %>%
+  mutate(Age=ifelse(age==1,"Altvögel","Jungvögel")) %>%
+  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+  
+  ggplot(aes(x=ctn, y=for.med))+
+  geom_point(aes(col=Age, shape=Age), position=position_dodge(width=0.2), size=2.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
+  facet_wrap(~prior, ncol = 2) +
+  
+  ## format axis ticks
+  labs(y="Anteil der geschossenen Waldschnepfen",x="Kanton",col="", shape="") +
+  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  
+  # viridis discrete color scale (cividis is very color-blind friendly)
+  scale_color_viridis_d(option = "cividis", end = 0.9) +
+  # complementary shapes for Age (helps in grayscale/print)
+  scale_shape_manual(values = c("Altvögel" = 16, "Jungvögel" = 17)) + # 16 = solid circle, 17 = solid triangle
+  
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=14, color="black"),
+        axis.title=element_text(size=16),
+        legend.text=element_text(size=14, color="black"),
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.1,0.93),
+        strip.text=element_text(size=18, color="black"),
+        strip.background=element_rect(fill="white", colour="black"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 12. ABANDONED CODE FOR ALTERNATIVE FIGURES ------------------------------------------
 
 mean.p.nonlocal.null<-fread("output/WOCO_nonlocal_probs_no_prior_featherscape.csv")
 mean.p.nonlocal.migprior<-fwrite("output/WOCO_nonlocal_probs_mig_prior_featherscape.csv")
