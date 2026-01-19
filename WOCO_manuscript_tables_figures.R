@@ -301,29 +301,29 @@ bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
 
 
 MAT_FIGURE<- mean.p.nonlocal %>%
-  group_by(age,ctn,ind, prior) %>%
+  group_by(ctn,ind, prior) %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
-  group_by(age,ctn, prior) %>%
+  group_by(ctn, prior) %>%
   summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
-  mutate(Age=ifelse(age==1,"Adult","Jungvogel")) %>%
+  #mutate(Age=ifelse(age==1,"Adult","Jungvogel")) %>%
   #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
   
   ggplot(aes(x=ctn, y=for.med))+
-  geom_point(aes(col=Age, shape=Age), position=position_dodge(width=0.4), size=3.5) +
-  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.15, linewidth=2, position=position_dodge(width=0.4)) +
+  geom_point(color= "navyblue", position=position_dodge(width=0.4), size=3.5) +
+  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl), color= "navyblue", width=0.15, linewidth=2, position=position_dodge(width=0.4)) +
   
   ## format axis ticks
-  labs(y="Anteil ausländischer Waldschnepfen",x="Kanton",col="", shape="") +
+  labs(y="Anteil ausländischer Waldschnepfen",x="Kanton") +
   scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
   
   annotation_custom(grob=gunicon, xmin=0.3, xmax=1.5, ymin=0.03, ymax=0.15) +
   annotation_custom(wocoicon, xmin=0.5, xmax=2.5, ymin=0, ymax=0.2) +
   
   # viridis discrete color scale (cividis is very color-blind friendly)
-  scale_color_viridis_d(option = "cividis", end = 0.9) +
+  #scale_color_viridis_d(option = "cividis", end = 0.9) +
   # complementary shapes for Age (helps in grayscale/print)
-  scale_shape_manual(values = c("Adult" = 16, "Jungvogel" = 17)) + # 16 = solid circle, 17 = solid triangle
+  #scale_shape_manual(values = c("Adult" = 16, "Jungvogel" = 17)) + # 16 = solid circle, 17 = solid triangle
   
   
   ## beautification of the axes
@@ -334,13 +334,13 @@ MAT_FIGURE<- mean.p.nonlocal %>%
         axis.text.y=element_text(size=18, color="black"),
         axis.text.x=element_text(size=18, color="black"),
         axis.title=element_text(size=20),
-        legend.text=element_text(size=18, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=18, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
+        # legend.text=element_text(size=18, color="black"),
+        # legend.direction = "vertical",
+        # legend.box = "horizontal",
+        # legend.title=element_text(size=18, color="black"),
+        # legend.position="inside",
+        # legend.key = element_rect(fill = NA, color = NA),
+        # legend.background = element_rect(fill = NA, color = NA),
         legend.position.inside=c(0.35,0.13))
 
 
@@ -921,14 +921,14 @@ shot_dates<-hist(lubridate::yday(UNK_WC$DATE), breaks=seq(250,365,7),plot=F)
 woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
   mutate(Date=parse_date_time(as.integer(yday), orders="j")) %>%
   mutate(abund=N/max(N)) %>%
-  mutate(Date=as.Date(Date-years(1)))
+  mutate(Date=as.Date(Date-years(2)))
 
 #colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
-colors <- c("Abundanz (ornitho.de)" = "#FFC20A", "Lokale Vögel (Telemetrie)" = "#0C7BDC", "Abschusszahlen" = "gray23")
+colors <- c("Abundanz (ornitho.ch)" = "#FFC20A", "Lokale Vögel (Telemetrie)" = "#0C7BDC", "Abschusszahlen" = "gray23")
 
 ggplot()+
   geom_line(data=woco_mig, aes(x=Date, y=mig, color="Lokale Vögel (Telemetrie)"),linewidth=2) +
-  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="Abundanz (ornitho.de)"),linewidth=2) +
+  geom_line(data=woco_abundance, aes(x=Date, y=abund, color="Abundanz (ornitho.ch)"),linewidth=2) +
   geom_col(data=woco_shot, aes(x=Date, y=abund, color="Abschusszahlen"),width = 6, alpha=0.5) +
   labs(color = "Datensatz") +
   scale_color_manual(values = colors) +
