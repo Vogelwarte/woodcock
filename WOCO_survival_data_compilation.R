@@ -226,7 +226,7 @@ woco_ann_ch_obs<-woco %>%
 woco_tag_mat<- woco %>%
   mutate(year=year(Datum), week=week(Datum)) %>%
   mutate(id=paste(Ring_num,year, sep="_")) %>%
-  select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort) %>%
+  select(id, Ring_num,week,Datum,Beobachtung,Markierung,Ort,Sendertyp) %>%
   mutate(week=ifelse(week<31,31,week)) %>%
   filter(week>30) %>%
   mutate(week=paste0('wk',week)) %>%
@@ -234,8 +234,9 @@ woco_tag_mat<- woco %>%
   filter(Beobachtung!="Senderfund") %>%
   filter(!(Beobachtung=="Fang" & Ort!="UG")) %>%
   mutate(tag=ifelse(Markierung=="Sender",1,0)) %>%
+  mutate(ptt=ifelse(Markierung=="Sender",ifelse(Sendertyp=="ARGOS",1,0),0)) %>%
   group_by(id) %>%
-  summarise(tag=max(tag))
+  summarise(tag=max(tag), ptt=max(ptt))
 
 
 ### CREATE BLANK MATRICES TO HOLD INFORMATION ABOUT TRUE AND OBSERVED STATES ###
@@ -243,6 +244,7 @@ woco_tag_mat<- woco %>%
 woco.obs.matrix<-woco_ann_ch_obs %>% arrange(id)
 woco.state.matrix<-woco_ann_ch_true %>% arrange(id)
 tag<-as.data.frame(woco_tag_mat %>% arrange(id) %>% select(tag))[,1]
+ptt<-as.data.frame(woco_tag_mat %>% arrange(id) %>% select(ptt))[,1]
 woco.eff.matrix<-woco_ann_ch_obs %>% arrange(id)
 dim(woco.obs.matrix)
 length(tag)

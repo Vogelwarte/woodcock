@@ -183,7 +183,8 @@ woco.mig.model<-nimbleCode({
       p.obs.in[i,t] <-ilogit(logit.p.obs.in[i,t])
       
       logit.p.obs.out[i,t] <- lpout.mean +      ### intercept for mean survival
-        b.obs.tag*(tag[i])    ### observation dependent on whether animal was tagged
+        b.obs.tag*(tag[i]) +   ### observation dependent on whether animal was tagged
+        b.obs.ptt*(ptt[i])    ### observation dependent on whether animal was tagged with a satellite transmitter
       p.obs.out[i,t] <-ilogit(logit.p.obs.out[i,t])
       
     } #t
@@ -214,7 +215,7 @@ woco.mig.model<-nimbleCode({
   b.mig.week ~ dnorm(1,sd=2)        # Prior for week effect on migration probability on logit scale - must be positive
   b.obs.effort ~ dnorm(1, sd=2)     # Prior for effort effect on observation probability on logit scale  - must be positive
   b.obs.tag ~ dnorm(1, sd=2)        # Prior for tag effect on observation probability on logit scale  - must be positive 
-  
+  b.obs.ptt ~ dnorm(0, sd=1)        # Prior for ptt effect on observation probability on logit scale  - neutral  
 
   # -------------------------------------------------
   # Define state-transition and observation matrices 
@@ -325,6 +326,7 @@ telemetry.constants <- list(f = f.telemetry,
                             week = seq(1:nweeks),
                             year = year,
                             tag = tag,
+                            ptt = ptt,
                             nind = nind,
                             nweeks=nweeks,
                             nyears = nyears,
@@ -369,7 +371,8 @@ smartInit1 <- list(# z = ifelse(is.na(z.telemetry),1,z.telemetry),
                    #### SLOPE PARAMETERS FOR PROBABILITIES ON LOGIT SCALE
                    b.mig.week = 0.5,         # Prior for week effect on migration probability on logit scale - must be positive
                    b.obs.effort = 0.5,         # Prior for effort effect on observation probability on logit scale  - must be positive
-                   b.obs.tag = 0.5         # Prior for tag effect on observation probability on logit scale  - must be positive 
+                   b.obs.tag = 0.5,         # Prior for tag effect on observation probability on logit scale  - must be positive
+                   b.obs.ptt = 0         # Prior for ptt effect on observation probability on logit scale  - neutral
                    
 )
 
