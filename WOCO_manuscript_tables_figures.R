@@ -19,7 +19,7 @@ library(tidyverse)
 library(readxl)
 library(dplyr)
 library(janitor)
-require(png)
+#require(png)
 library(grid)
 library(gtable)
 require(jpeg)
@@ -41,7 +41,7 @@ try(setwd("C:/Users/sop/OneDrive - Vogelwarte/Woodcock"), silent=T)
 try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
-imgGun<-readPNG("manuscript/rifleicon.png")
+imgGun<-image_read("manuscript/shotgun-icon-rifle-illustration-sign-weapon-symbol-hunting-logo-vector.jpg") %>% image_transparent("white", fuzz=5)
 gunicon <- rasterGrob(imgGun, interpolate=TRUE)
 imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
 wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
@@ -172,8 +172,8 @@ FIGURE1<-woco_mig %>%
   # 
   
   ### add the bird icons
-  annotation_custom(gunicon, xmin=lubridate::ymd("2024-08-15"), xmax=lubridate::ymd("2024-09-07"), ymin=0.6, ymax=0.8)+
-  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-07-15"), xmax=lubridate::ymd("2024-09-01"), ymin=0.55, ymax=0.85)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-05"), xmax=lubridate::ymd("2024-09-05"), ymin=0.8, ymax=1)+
   
   
   ## format axis ticks
@@ -245,8 +245,10 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="", shape="") +
   scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
   
-  # viridis discrete color scale (cividis is very color-blind friendly)
-  scale_color_viridis_d(option = "cividis", end = 0.9) +
+  # viridis discrete color scale (cividis is very color-blind friendly - but no contrast to white background)
+  #scale_color_viridis_d(option = "cividis", end = 0.9) +
+  scale_color_manual(values=c("Adult" = "#377EB8", "Juvenile" = "#df8640")) +
+  
   # complementary shapes for Age (helps in grayscale/print)
   scale_shape_manual(values = c("Adult" = 16, "Juvenile" = 17)) + # 16 = solid circle, 17 = solid triangle
   
@@ -413,10 +415,12 @@ FIGURES2<-woco %>%
   ## format axis ticks
   labs(y="Proportion of woodcock feathers",
        x=expression(paste(delta^{2}, "H (\u2030)")),
-       col="Origin", fill="Origin") +
+       fill="Origin") +
   scale_y_continuous(labels = scales::percent_format(scale=100)) +
-  # viridis discrete color scale (cividis is very color-blind friendly)
-  scale_fill_viridis_d(option = "cividis", end = 0.9) +
+  
+  # viridis discrete color scale (cividis is very color-blind friendly - but no contrast to white background)
+  #scale_color_viridis_d(option = "cividis", end = 0.9) +
+  scale_fill_manual(values=c("Switzerland" = "#377EB8", "unknown" = "#df8640")) +
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
@@ -638,7 +642,8 @@ for (ct in 1:length(unique(woco.unk.sf$KANTON))){
       panel.background = element_blank(),   # remove box fill
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.text = element_text(size = 12, color = "black"),
+      axis.text.y = element_text(size = 12, color = "black"),
+      axis.text.x = element_text(size = 8, color = "black"),
       axis.title = element_blank(),
       legend.position = "none",             # we'll collect legend outside
       plot.margin = unit(rep(1, 4), "pt"),  # very tight outer margins
@@ -881,7 +886,9 @@ woco_mig %>%
   
   ## format axis ticks
   scale_x_date(name="Woche im Jahr", date_labels = "%d %b") +
-  scale_y_continuous(name="Anteil Waldschnepfen die abgezogen sind", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  scale_y_continuous(name="Anteil Waldschnepfen abgezogen", limits=c(0,1), breaks=seq(0,1,0.2)) +
+  geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.7, linetype="dashed", col="firebrick", linewidth=2) +
+  geom_segment(x=lubridate::ymd("2024-12-15"),y=0,yend=0.7, linetype="dashed", col="firebrick", linewidth=2) +
   
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
@@ -892,6 +899,7 @@ woco_mig %>%
         axis.title=element_text(size=18),
         strip.background=element_rect(fill="white", colour="black"))
 
+ggsave("Oppel_Mollet_Waldschnepfe_Grafik_OB.jpg", width=8, height=5, dpi=600)
 
 
 ## 10.2. phenology ----
