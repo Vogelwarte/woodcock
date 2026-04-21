@@ -174,7 +174,8 @@ woco.mig.model<-nimbleCode({
       p.dead.out[i,t] <- mean.p.dead.out[year[i]] #+      ###
       
       logit.mig[i,t] <- lm.mean +      ### intercept for mean survival
-        b.mig.week*(week[t])     ### migration probability dependent on week
+        b.mig.week*(week[t]) +    ### migration probability dependent on week
+        ind.ran.effect[randID[i]]*dupinds[i]  ### add an individual random effect for the departure timing to account for repeated individuals - but only for those individuals that were actually recorded in >1 year
       mig[i,t] <-ilogit(logit.mig[i,t])
       
       logit.p.obs.in[i,t] <- lpin.mean +      ### intercept for mean survival
@@ -215,7 +216,15 @@ woco.mig.model<-nimbleCode({
   b.mig.week ~ dnorm(1,sd=2)        # Prior for week effect on migration probability on logit scale - must be positive
   b.obs.effort ~ dnorm(1, sd=2)     # Prior for effort effect on observation probability on logit scale  - must be positive
   b.obs.tag ~ dnorm(1, sd=2)        # Prior for tag effect on observation probability on logit scale  - must be positive 
-  b.obs.ptt ~ dnorm(0, sd=1)        # Prior for ptt effect on observation probability on logit scale  - neutral  
+  b.obs.ptt ~ dnorm(0, sd=1)        # Prior for ptt effect on observation probability on logit scale  - neutral
+  
+  #### INDIVIDUAL RANDOM EFFECT TO ACCOUNT FOR REPEATED SAMPLING OF THE SAME INDIVIDUALS
+  for(i in 1:ndupinds) {
+    ind.ran.effect[i] ~ dnorm(0,tau=tau.ind.eff)   # one effect for all singular birds, and one for birds recorded in >1 year
+  }
+  tau.ind.eff<-1/(sigma.ind.eff*sigma.ind.eff)
+  sigma.ind.eff~dunif(0,1)
+  
 
   # -------------------------------------------------
   # Define state-transition and observation matrices 
@@ -330,6 +339,9 @@ telemetry.constants <- list(f = f.telemetry,
                             nind = nind,
                             nweeks=nweeks,
                             nyears = nyears,
+                            ndupinds = max(indID),
+                            dupinds = dupinds,
+                            randID = indID,
                             nstates = max(y.telemetry))
 
 telemetry.data <- list(y = y.telemetry)
@@ -360,6 +372,7 @@ smartInit1 <- list(# z = ifelse(is.na(z.telemetry),1,z.telemetry),
                    mean.phi = runif(nyears,0.95,0.999),
                    mean.p.dead.in = runif(nyears,0.2,0.9),
                    mean.p.dead.out = runif(nyears,0,0.3),
+                   sigma.ind.eff = runif(1,0,1),
                    
                    #### BASELINE FOR MIGRATION PROBABILITY (varies by year)
                    mean.mig = 0.1,   # fairly uninformative prior for weekly migration probabilities
@@ -517,7 +530,7 @@ ggsave(plot=FIGURE,
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-############ CUMULATIVE FIGURE: PROP POPULATION THAT HAS DEPARTED
+############ CUMULATIVE FIGURE: PROP POPULATION THAT HAS DEPARTED ------------
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## first calculate what proportion of a population of 1000 birds has departed by a given date
 ## UPDATE 22 Oct 2025 to parallelize code
