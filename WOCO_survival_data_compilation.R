@@ -415,6 +415,7 @@ z.telemetry<-z.telemetry[-noninfobirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[-noninfobirds,]
 woco.eff.matrix<-woco.eff.matrix[-noninfobirds,]
 tag<-tag[-noninfobirds]
+ptt<-ptt[-noninfobirds]
 dim(y.telemetry)
 
 #### RETAIN ONLY individuals that were once seen alive in study area (all others have no value for estimating WHEN live birds leave study area)
@@ -424,6 +425,7 @@ z.telemetry<-z.telemetry[UKbirds,]
 woco_ann_ch_obs<-woco_ann_ch_obs[UKbirds,]
 woco.eff.matrix<-woco.eff.matrix[UKbirds,]
 tag<-tag[UKbirds]
+ptt<-ptt[UKbirds]
 dim(y.telemetry)
 
 #### PREPARE A MATRIX OF WEEKS
@@ -462,6 +464,36 @@ nyears
 max(year)
 max(tag)
 max(effort)
+
+
+############# QUANTIFY EXTENT OF USE OF SUPPLEMENTED OCCASIONS----------
+
+length(which(!is.na(woco_ann_ch_true[,2])))
+length(which(!is.na(woco_ann_ch_true[,25])))
+length(unique(woco_ann_ch_obs$id))
+
+
+multyear_ind<-woco_ann_ch_obs %>%
+  separate(id, into=c("RingNr","year"), sep="_") %>%
+  group_by(RingNr) %>%
+  summarise(Nyears=length(unique(year))) %>%
+  dplyr::filter(Nyears>1) %>%
+  mutate(RandID=seq_along(RingNr)+1)
+
+table(multyear_ind$Nyears)
+
+
+## add the relevant individual identifiers for the NIMBLE model -----------
+dupinds<-as.data.frame(woco_ann_ch_obs %>%
+  separate(id, into=c("RingNr","year"), sep="_") %>%
+  mutate(Y=ifelse(RingNr %in% multyear_ind$RingNr,1,0)) %>%
+  dplyr::select(Y))[,1]
+
+indID<-as.data.frame(woco_ann_ch_obs %>%
+                         separate(id, into=c("RingNr","year"), sep="_") %>%
+                       left_join(multyear_ind, by="RingNr") %>%
+                       mutate(ID=ifelse(is.na(RandID),1,RandID)) %>%
+                         dplyr::select(ID))[,1]
 
 
 ############# SAVE  PREPARED DATA ----------
