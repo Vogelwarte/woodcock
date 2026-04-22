@@ -59,7 +59,7 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 
 # Load data and likelihood function ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
-load("data/woco_mig_input.RData")  ## option to remove _no_argos for full dataset
+load("data/woco_mig_input_autumn_only.RData")  ## option to remove _no_argos for full dataset
 nimbleOptions(allowDynamicIndexing = TRUE)
 
 
