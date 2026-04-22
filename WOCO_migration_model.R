@@ -426,8 +426,8 @@ MCMCsummary(woco_surv)
 toc() 
 
 
-saveRDS(woco_surv,"output/woco_mig_depart_output_nimble.rds")
-#woco_surv<-readRDS("output/woco_mig_depart_output_nimble.rds")
+saveRDS(woco_surv,"output/woco_mig_depart_output_raneff.rds")
+#woco_surv<-readRDS("output/woco_mig_depart_output_raneff.rds")
 
 
 
@@ -442,8 +442,8 @@ out$parameter<-row.names(out)
 names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
-fwrite(out,"output/woco_telemetry_seasonal_surv_parm.csv")
-#out<-fread("output/woco_telemetry_seasonal_surv_parm.csv")
+fwrite(out,"output/woco_telemetry_seasonal_surv_parm_raneff.csv")
+#out<-fread("output/woco_telemetry_seasonal_surv_parm_raneff.csv")
 
 
 #### CALCULATE APPROXIMATE ANNUAL SURVIVAL
@@ -626,9 +626,6 @@ FIGURE2<-woco.mig %>%
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE2
 
-ggsave(plot=FIGURE2,
-       filename="output/woco_cumulative_mig_prop.jpg", 
-       device="jpg",width=11, height=8)
 
 
 
