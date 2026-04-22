@@ -22,6 +22,10 @@
 ## UPDATED 22 OCT 2025 to set obs to NA prior to first observation (even in subsequent years) to avoid model failure
 
 
+## revision in April 2026
+## assess the magnitude of extended encounter occasions 30 and 53
+
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -182,6 +186,78 @@ woco_ch <- woco %>%
 ### we only want weeks from Aug - December
 ### but some birds are marked earlier in the year and are then shot - cannot have a dead state without a previous marking occasion
 ### summarised all encounters prior to August and entered it in first August week
+
+
+### assess consequence of lumping earlier records into single encounter occasion
+dim(woco)
+dim(woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  filter(week<=30))
+
+
+## these are the birds that were found dead within study area after week 30
+localrecovs<-woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  filter(Beobachtung=="Totfund") %>%
+  filter(Ort=="UG") %>%
+  group_by(id,Ring_num,year) %>%
+  summarise(dead=min(week)) %>%
+  filter(dead>30) 
+
+## these are the individuals that have no live within study area record after week 30
+earlycaps<-woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  filter(Beobachtung!="Totfund") %>%
+  filter(Ort=="UG") %>%
+  group_by(id,Ring_num,year) %>%
+  summarise(first=min(week), last=max(week), nweeks=length(unique(week))) %>%
+  filter(last<31) %>%
+  left_join(localrecovs, by=c('id','Ring_num','year')) %>%
+  filter(!is.na(dead))
+
+## birds with valid data within the study area
+infobirds<-woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  filter(Beobachtung!="Totfund") %>%
+  filter(Ort=="UG") %>%
+  filter(week>30) %>%
+  group_by(id,Ring_num,year) %>%
+  summarise(first=min(week), last=max(week), nweeks=length(unique(week))) %>%
+  arrange(desc(first),nweeks)
+dim(infobirds)
+
+## birds without valid data within the study area
+noninfobirds<-woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  filter(!(id %in% infobirds$id)) %>%
+  group_by(id,Ring_num,year) %>%
+  summarise(first=min(week), last=max(week), nweeks=length(unique(week)), nlocs=length(unique(Ort))) %>%
+  arrange(desc(first),nweeks)
+dim(noninfobirds)
+
+
+## birds that would be added if we lumped occasions prior to week 30
+addedinfobirds<-woco %>%
+  mutate(year=year(Datum), week=week(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  filter((id %in% noninfobirds$id)) %>%
+  filter(Beobachtung!="Totfund") %>%
+  filter(Ort=="UG") %>%
+  filter(week<=30) %>%
+  group_by(id,Ring_num,year) %>%
+  summarise(first=min(week), last=max(week), nweeks=length(unique(week)))
+dim(addedinfobirds)
+
+
+
+
+
+
+
 ### weekly encounter history ####
 woco_ann_ch_true<-woco %>%
   mutate(year=year(Datum), week=week(Datum)) %>%
