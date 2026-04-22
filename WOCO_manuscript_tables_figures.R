@@ -42,6 +42,8 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 
 #setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock")
 imgGun<-image_read("manuscript/shotgun-icon-rifle-illustration-sign-weapon-symbol-hunting-logo-vector.jpg") %>% image_transparent("white", fuzz=5)
+#imgGun <- image_flop(imgGun)
+imgGun <- image_rotate(imgGun, 45)
 gunicon <- rasterGrob(imgGun, interpolate=TRUE)
 imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
 wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
@@ -172,8 +174,8 @@ FIGURE1<-woco_mig %>%
   # 
   
   ### add the bird icons
-  annotation_custom(gunicon, xmin=lubridate::ymd("2024-07-15"), xmax=lubridate::ymd("2024-09-01"), ymin=0.55, ymax=0.85)+
-  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-05"), xmax=lubridate::ymd("2024-09-05"), ymin=0.8, ymax=1)+
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-09-07"), xmax=lubridate::ymd("2024-10-25"), ymin=0.60, ymax=0.9)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
   
   
   ## format axis ticks
