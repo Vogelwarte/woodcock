@@ -486,6 +486,7 @@ dim(y.telemetry)
 
 #### REMOVE individuals with no information (i.e. those that left or were shot before August in a given year, OR only have telemetry locations outside)
 ## no longer needed after selection was done earlier
+
 # noninfobirds1<-which(apply(y.telemetry, 1, function(x) length(unique(x)) == 1) == TRUE)  ## only a single state was observed - uninformative
 # noninfobirds2<-which(apply(y.telemetry, 1, function(x) all(x %in% c(2, 5))))   ## birds only observed outside
 # #noninfobirds3<-which(apply(z.telemetry, 1, function(x) all(x %in% c(3,4))))   ## birds with a true state only outside - removed as equivalent to noninfobirds2
@@ -500,14 +501,14 @@ dim(y.telemetry)
 # dim(y.telemetry)
 
 #### RETAIN ONLY individuals that were once seen alive in study area (all others have no value for estimating WHEN live birds leave study area)
-UKbirds<-which(apply(y.telemetry, 1, function(x) 1 %in% unique(x)) == TRUE)
-y.telemetry<-y.telemetry[UKbirds,]
-z.telemetry<-z.telemetry[UKbirds,]
-woco_ann_ch_obs<-woco_ann_ch_obs[UKbirds,]
-woco.eff.matrix<-woco.eff.matrix[UKbirds,]
-tag<-tag[UKbirds]
-ptt<-ptt[UKbirds]
-dim(y.telemetry)
+# UKbirds<-which(apply(y.telemetry, 1, function(x) 1 %in% unique(x)) == TRUE)
+# y.telemetry<-y.telemetry[UKbirds,]
+# z.telemetry<-z.telemetry[UKbirds,]
+# woco_ann_ch_obs<-woco_ann_ch_obs[UKbirds,]
+# woco.eff.matrix<-woco.eff.matrix[UKbirds,]
+# tag<-tag[UKbirds]
+# ptt<-ptt[UKbirds]
+# dim(y.telemetry)
 
 #### PREPARE A MATRIX OF WEEKS
 nweeks<-dim(y.telemetry)[2]
