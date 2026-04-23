@@ -59,7 +59,7 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 
 # Load data and likelihood function ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
-load("data/woco_mig_input.RData")  ## option to remove _no_argos for full dataset
+load("data/woco_mig_input_autumn_only.RData")  ## option to remove _no_argos for full dataset
 nimbleOptions(allowDynamicIndexing = TRUE)
 
 
@@ -443,7 +443,7 @@ names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
 fwrite(out,"output/woco_telemetry_seasonal_surv_parm_raneff.csv")
-#out<-fread("output/woco_telemetry_seasonal_surv_parm_raneff.csv")
+#out<-fread("output/woco_telemetry_seasonal_surv_parm_raneff_autumn_only.csv")
 
 
 #### CALCULATE APPROXIMATE ANNUAL SURVIVAL
@@ -593,7 +593,7 @@ wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 FIGURE2<-woco.mig %>% 
   group_by(week) %>%
   summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
-  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% #print(n=50)
   
   ggplot()+
   geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
