@@ -577,7 +577,14 @@ indID<-as.data.frame(woco_ann_ch_obs %>%
                        mutate(ID=ifelse(is.na(RandID),1,RandID)) %>%
                          dplyr::select(ID))[,1]
 
+## number of individuals in study
+n.individuals<-woco_ann_ch_obs %>%
+  separate(id, into=c("RingNr","year"), sep="_") %>%
+  group_by(RingNr) %>%
+  summarise(Nyears=length(unique(year))) %>%
+  arrange(desc(Nyears))
+
 
 ############# SAVE  PREPARED DATA ----------
-save.image("data/woco_mig_input_autumn_only.RData")
+save.image("data/woco_mig_input.RData")
 
