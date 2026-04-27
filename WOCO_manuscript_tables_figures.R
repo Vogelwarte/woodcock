@@ -144,7 +144,7 @@ TableS2<-woco %>%
   tidyr::pivot_wider(names_from="age",values_from="n", values_fill=0) %>%
   adorn_totals()
 
-fwrite(TableS2,"manuscript/Table_S2.csv")
+#fwrite(TableS2,"manuscript/Table_S2.csv")
 
 
 
@@ -196,7 +196,7 @@ FIGURE1
 
 ggsave(plot=FIGURE1,
        filename="manuscript/Figure_1.jpg", 
-       device="jpg",width=11, height=8)
+       device="jpg",width=12, height=8)
 
 
 
@@ -220,7 +220,8 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
 # mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
 # mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
 
-FIGURE2dat<- fread("output/summarised_woco_origin_probs_canton_prior.csv")
+FIGURE2dat<- fread("output/summarised_woco_origin_probs_canton_prior.csv") %>%
+  mutate(prior=factor(prior, levels=c("only migration","combined abundance and migration","uninformative prior")))
 
 # FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
 #   group_by(age,ctn,ind, prior) %>%
@@ -252,7 +253,6 @@ FIGURE2<-ggplot(data=FIGURE2dat,aes(x=ctn, y=for.med))+
   # complementary shapes for Age (helps in grayscale/print)
   scale_shape_manual(values = c("Adult" = 16, "Juvenile" = 17)) + # 16 = solid circle, 17 = solid triangle
   
-  
   ## beautification of the axes
   theme(panel.background=element_rect(fill="white", colour="black"),
         panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
@@ -266,9 +266,14 @@ FIGURE2<-ggplot(data=FIGURE2dat,aes(x=ctn, y=for.med))+
         legend.box = "horizontal",
         legend.title=element_text(size=14, color="black"),
         legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.87,0.93),
+        
+        # Transparent overall legend background
+        legend.background = element_rect(fill = "white", colour = NA),
+        
+        # White background ONLY behind legend entries
+        legend.key = element_rect(fill = "white", colour = NA),
+        
+        legend.position.inside=c(0.89,0.95),
         strip.text=element_text(size=18, color="black"),
         strip.background=element_rect(fill="white", colour="black"))
 FIGURE2
@@ -282,68 +287,65 @@ ggsave(plot=FIGURE2,
 
 
 ### extrapolating annual harvest total of Swiss population
-
-npairs<-c(1000,4000) ## from Knaus 2018
-sexratio<-0.5
-productivity<-1.6 ## from Kramer et al. 2019: https://www.sciencedirect.com/science/article/pii/S0006320718314149
-shot<-1820
-tot.birds<-(npairs/sexratio)+npairs*productivity
-
-bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
-  group_by(age,ctn,ind, prior) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
-  group_by(prior) %>%
-  summarise(for.lcl=quantile(p.nonlocal.mean,0.025), for.ucl=quantile(p.nonlocal.mean,0.975)) %>%
-  mutate(min=(1-for.ucl)*shot/tot.birds[2], max=(1-for.lcl)*shot/tot.birds[1])
+## removed from manuscript because reviewers did not like this calculation
+# npairs<-c(1000,4000) ## from Knaus 2018
+# sexratio<-0.5
+# productivity<-1.6 ## from Kramer et al. 2019: https://www.sciencedirect.com/science/article/pii/S0006320718314149
+# shot<-1820
+# tot.birds<-(npairs/sexratio)+npairs*productivity
+# 
+# FIGURE2dat %>%
+#   group_by(prior) %>%
+#   summarise(for.lcl=quantile(for.lcl,0.025), for.ucl=quantile(for.ucl,0.975)) %>%
+#   mutate(min=(1-for.ucl)*shot/tot.birds[2], max=(1-for.lcl)*shot/tot.birds[1])
 
 
 
 ## 3.1. MAT presentation figure -----------------
-
-
-MAT_FIGURE<- mean.p.nonlocal %>%
-  group_by(ctn,ind, prior) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
-  group_by(ctn, prior) %>%
-  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
-  #mutate(Age=ifelse(age==1,"Adult","Jungvogel")) %>%
-  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
-  
-  ggplot(aes(x=ctn, y=for.med))+
-  geom_point(color= "navyblue", position=position_dodge(width=0.4), size=3.5) +
-  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl), color= "navyblue", width=0.15, linewidth=2, position=position_dodge(width=0.4)) +
-  
-  ## format axis ticks
-  labs(y="Anteil ausländischer Waldschnepfen",x="Kanton") +
-  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
-  
-  annotation_custom(grob=gunicon, xmin=0.3, xmax=1.5, ymin=0.03, ymax=0.15) +
-  annotation_custom(wocoicon, xmin=0.5, xmax=2.5, ymin=0, ymax=0.2) +
-  
-  # viridis discrete color scale (cividis is very color-blind friendly)
-  #scale_color_viridis_d(option = "cividis", end = 0.9) +
-  # complementary shapes for Age (helps in grayscale/print)
-  #scale_shape_manual(values = c("Adult" = 16, "Jungvogel" = 17)) + # 16 = solid circle, 17 = solid triangle
-  
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=18, color="black"),
-        axis.text.x=element_text(size=18, color="black"),
-        axis.title=element_text(size=20),
-        # legend.text=element_text(size=18, color="black"),
-        # legend.direction = "vertical",
-        # legend.box = "horizontal",
-        # legend.title=element_text(size=18, color="black"),
-        # legend.position="inside",
-        # legend.key = element_rect(fill = NA, color = NA),
-        # legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.35,0.13))
+# 
+# 
+# MAT_FIGURE<- mean.p.nonlocal %>%
+#   group_by(ctn,ind, prior) %>%
+#   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+#   ungroup() %>%
+#   group_by(ctn, prior) %>%
+#   summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+#   #mutate(Age=ifelse(age==1,"Adult","Jungvogel")) %>%
+#   #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+#   
+#   ggplot(aes(x=ctn, y=for.med))+
+#   geom_point(color= "navyblue", position=position_dodge(width=0.4), size=3.5) +
+#   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl), color= "navyblue", width=0.15, linewidth=2, position=position_dodge(width=0.4)) +
+#   
+#   ## format axis ticks
+#   labs(y="Anteil ausländischer Waldschnepfen",x="Kanton") +
+#   scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+#   
+#   annotation_custom(grob=gunicon, xmin=0.3, xmax=1.5, ymin=0.03, ymax=0.15) +
+#   annotation_custom(wocoicon, xmin=0.5, xmax=2.5, ymin=0, ymax=0.2) +
+#   
+#   # viridis discrete color scale (cividis is very color-blind friendly)
+#   #scale_color_viridis_d(option = "cividis", end = 0.9) +
+#   # complementary shapes for Age (helps in grayscale/print)
+#   #scale_shape_manual(values = c("Adult" = 16, "Jungvogel" = 17)) + # 16 = solid circle, 17 = solid triangle
+#   
+#   
+#   ## beautification of the axes
+#   theme(panel.background=element_rect(fill="white", colour="black"),
+#         panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
+#         panel.grid.major.x = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         axis.text.y=element_text(size=18, color="black"),
+#         axis.text.x=element_text(size=18, color="black"),
+#         axis.title=element_text(size=20),
+#         # legend.text=element_text(size=18, color="black"),
+#         # legend.direction = "vertical",
+#         # legend.box = "horizontal",
+#         # legend.title=element_text(size=18, color="black"),
+#         # legend.position="inside",
+#         # legend.key = element_rect(fill = NA, color = NA),
+#         # legend.background = element_rect(fill = NA, color = NA),
+#         legend.position.inside=c(0.35,0.13))
 
 
 
@@ -774,10 +776,10 @@ shot_dates<-hist(lubridate::yday(UNK_WC$DATE), breaks=seq(250,365,7),plot=F)
 woco_shot<-tibble(yday=shot_dates$mids, N=shot_dates$counts) %>%
   mutate(Date=parse_date_time(as.integer(yday), orders="j")) %>%
   mutate(abund=N/max(N)) %>%
-  mutate(Date=as.Date(Date-years(1)))
+  mutate(Date=as.Date(Date-years(2)))
 
 #colors <- c("All birds" = "darkolivegreen", "Local birds" = "firebrick", "Shot birds" = "gray23")
-colors <- c("All birds" = "#0C7BDC", "Local birds" = "#FFC20A", "Shot birds" = "gray23")
+colors <- c("All birds" = "#377EB8", "Local birds" = "#df8640", "Shot birds" = "gray23")
 
 FIG_s5<-ggplot()+
   geom_line(data=woco_mig, aes(x=Date, y=mig, color="Local birds"),linewidth=2) +
