@@ -337,7 +337,7 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal\\[", colnames(samples))])
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="combined abundance and migration")
-##fwrite(mean.p.nonlocal,"output/WOCO_nonlocal_probs_comb_prior.csv")
+##fwrite(mean.p.nonlocal,"output/WOCO_nonlocal_probs_comb_prior.csv")  ### this is too large to stor!
 
 mean.p.nonlocal %>% filter(is.na(age))
 
@@ -493,7 +493,7 @@ mean.p.nonlocal.migprior <- as_tibble(samples.migprior[,grep("p.nonlocal\\[", co
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="only migration")
-fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
+#fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")  ## this is too large to store
 
 # summarise across SUI
 
@@ -508,7 +508,7 @@ out.sui<- mean.p.nonlocal.migprior %>%
   mutate(prior="only migration") %>%
   bind_rows(out.sui)
 out.sui  
-fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
+#fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
 
 
 # summarise by Canton
@@ -525,7 +525,7 @@ out.ctn<- mean.p.nonlocal.migprior %>%
   mutate(prior="only migration") %>%
   bind_rows(out.ctn)
 out.ctn
-fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
+#fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
 
 
 
@@ -683,7 +683,7 @@ mean.p.nonlocal.null <- as_tibble(out[grep("p.nonlocal\\[", out$parameter),]) %>
   dplyr::filter(!(ctn=="VS" & age==0)) %>% ### this is just the prior because no data exist from VS juveniles
   select(age,ctn,prior,median, lcl,ucl) %>%
   rename(for.med=median,for.ucl=ucl, for.lcl=lcl)
-fwrite(mean.p.nonlocal.null,"output/WOCO_nonlocal_probs_no_prior.csv")
+#fwrite(mean.p.nonlocal.null,"output/WOCO_nonlocal_probs_no_prior.csv")
 
 # compile all the samples
 samples.null <- rbind(woco.iso.null$samples$chain1,woco.iso.null$samples$chain2,woco.iso.null$samples$chain3,woco.iso.null$samples$chain4)
@@ -780,18 +780,12 @@ fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON_no_prior.csv")
 # fwrite(prop.cert,"output/woco_assignment_certainty_proportions.csv")
 
 
-prop.cert %>% arrange(age, prior) %>% print(n=20)
+# prop.cert %>% arrange(age, prior) %>% print(n=20)
 
 
-# 7. summarise output in graphical form ------------------------------------------
+# 7. summarise output and save data for Figure 2 ------------------------------------------
 
-# mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
-# mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
-# mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
-
-
-
-FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+FIGURE2dat<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   group_by(age,ctn,ind, prior) %>%
   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
   ungroup() %>%
@@ -799,84 +793,13 @@ FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
   summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
   bind_rows(mean.p.nonlocal.null) %>%
   mutate(prior=factor(prior, levels=c("only migration","combined abundance and migration","uninformative prior"))) %>%
-  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
-  
-  ggplot(aes(x=ctn, y=for.med))+
-  geom_point(aes(col=Age), position=position_dodge(width=0.2), size=2.5) +
-  geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
-  facet_wrap(~prior, ncol = 1) +
-  
-  # annotation_custom(grob=gunicon, xmin=0.5, xmax=1.5, ymin=0.05, ymax=0.18) +
-  # annotation_custom(wocoicon, xmin=0.5, xmax=2.9, ymin=0.10, ymax=0.35) +
-  
-  ## format axis ticks
-  labs(y="Proportion of shot woodcocks of non-local origin",x="Swiss Canton",col="") +
-  scale_y_continuous(limits=c(0,1), breaks=seq(0,1,0.2), labels=seq(0,1,0.2)) +
+  mutate(Age=ifelse(age==1,"Adult","Juvenile"))
 
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major.y = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=14, color="black"),
-        axis.text.x=element_text(size=14, color="black"),
-        axis.title=element_text(size=16),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=14, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.87,0.93),
-        strip.text=element_text(size=18, color="black"),
-        strip.background=element_rect(fill="white", colour="black"))
-FIGURE2
-
-
-ggsave(plot=FIGURE2,
-       filename="output/woco_origin_probability_estimates_all_priors.jpg", 
-       device="jpg",width=9, height=12)
-
-
-ggsave(plot=FIGURE2,
-       filename="manuscript/Figure_2.jpg", 
-       device="jpg",width=9, height=12, dpi=600)
+fwrite(FIGURE2dat,"output/summarised_woco_origin_probs_canton_prior.csv")
 
 
 
 # 7. SUMMARY FIGURES FOR MANUSCRIPT ----------------------------------
-
-## 7.1. PLOT HISTOGRAMS FOR SUISSE AND OTHER BIRDS ----
-woco$ORIGINE<-ifelse(woco$ORIGINE=="SCHWEIZ","Switzerland","unknown")
-FIGURES2<-ggplot(woco, aes(x=dH, col=ORIGINE, fill=ORIGINE)) +
-  geom_histogram(alpha=0.5,position = position_dodge(width=1)) +
-  
-  ## format axis ticks
-  labs(y="Number of woodcock feathers",
-       x=expression(paste(delta^{2}, "H (\u2030)")),
-       col="Origin", fill="Origin") +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"),
-        panel.grid.major = element_line(linewidth=0.5, colour="grey59", linetype="dashed"),
-        panel.grid.minor = element_blank(),
-        plot.margin = margin(1,1,1,1, "cm"),
-        axis.text=element_text(size=14, color="black"),
-        axis.title=element_text(size=16),
-        legend.text=element_text(size=14, color="black"),
-        legend.direction = "vertical",
-        legend.box = "horizontal",
-        legend.title=element_text(size=14, color="black"),
-        legend.position="inside",
-        legend.key = element_rect(fill = NA, color = NA),
-        legend.background = element_rect(fill = NA, color = NA),
-        legend.position.inside=c(0.85,0.85),
-        strip.text=element_text(size=18, color="black"),
-        strip.background=element_rect(fill="white", colour="black"))
-FIGURES2
-#ggsave("output/WOCO_isotope_histogram_by_origin.jpg")
 
 
 ## report numbers in manuscript

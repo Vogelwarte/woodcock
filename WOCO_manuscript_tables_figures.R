@@ -7,7 +7,7 @@
 
 ## added German figures for MAT presentation
 
-
+## revised on 27 April to update figures and tables for revision
 
 # Clear workspace ---------------------------------------------------------
 
@@ -45,6 +45,8 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 imgGun<-image_read("manuscript/shotgun-icon-rifle-illustration-sign-weapon-symbol-hunting-logo-vector.jpg") %>% image_transparent("white", fuzz=5)
 #imgGun <- image_flop(imgGun)
 imgGun <- image_rotate(imgGun, 45)
+imgGun <- image_trim(imgGun, fuzz=50)
+#imgGun <- image_crop(imgGun, "400x400+200+200")
 gunicon <- rasterGrob(imgGun, interpolate=TRUE)
 imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fuzz=5)
 wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
@@ -162,6 +164,10 @@ FIGURE1<-woco_mig %>%
   ggplot()+
   geom_ribbon(aes(x=Date, ymin=mig.lcl, ymax=mig.ucl), alpha=0.2, fill="firebrick") +   ##
   geom_line(aes(x=Date, y=mig),linewidth=1, col="firebrick")+     ##
+  
+  ### add the bird and icons
+  annotation_custom(gunicon, xmin=lubridate::ymd("2024-09-01"), xmax=lubridate::ymd("2024-10-31"), ymin=0.56, ymax=0.92)+
+  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
 
   ### add vertical lines to specify key dates OF OLD HUNTING TIMES
   geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
@@ -174,10 +180,7 @@ FIGURE1<-woco_mig %>%
   # geom_text(x=lubridate::ymd("2024-10-15"),y=0.65,label = "FR\nTI\nVD", size=6,col="grey18", vjust = 'bottom')+
   # 
   
-  ### add the bird icons
-  annotation_custom(gunicon, xmin=lubridate::ymd("2024-09-07"), xmax=lubridate::ymd("2024-10-25"), ymin=0.60, ymax=0.9)+
-  annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
-  
+
   
   ## format axis ticks
   scale_x_date(name="Week of the year", date_labels = "%d %b") +
@@ -199,7 +202,7 @@ ggsave(plot=FIGURE1,
 
 
 ## 2.1. CALCULATE ANNUAL SURVIVAL ---------
-out<-fread("output/woco_telemetry_seasonal_surv_parm.csv")
+out<-fread("output/woco_telemetry_seasonal_surv_parm_raneff.csv")
 out %>% filter(startsWith(parameter,"mean.phi")) %>%
   mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
   select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
@@ -213,30 +216,24 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
 
 # 3. FIGURE 2 ---------------
 
-mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
-mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
-mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
-
-
-
 # mean.p.nonlocal.migprior<- fread("output/WOCO_nonlocal_probs_mig_prior.csv")
 # mean.p.nonlocal<- fread("output/WOCO_nonlocal_probs_comb_prior.csv")
 # mean.p.nonlocal.null<- fread("output/WOCO_nonlocal_probs_no_prior.csv")
 
+FIGURE2dat<- fread("output/summarised_woco_origin_probs_canton_prior.csv")
 
-
-FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
-  group_by(age,ctn,ind, prior) %>%
-  summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
-  ungroup() %>%
-  group_by(age,ctn, prior) %>%
-  summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
-  bind_rows(mean.p.nonlocal.null) %>%
-  mutate(prior=factor(prior, levels=c("only migration","combined abundance and migration","uninformative prior"))) %>%
-  mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
-  #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
+# FIGURE2<- bind_rows(mean.p.nonlocal,mean.p.nonlocal.migprior) %>%
+#   group_by(age,ctn,ind, prior) %>%
+#   summarise(p.nonlocal.mean=mean(p.nonlocal)) %>%
+#   ungroup() %>%
+#   group_by(age,ctn, prior) %>%
+#   summarise(for.med=median(p.nonlocal.mean),for.ucl=quantile(p.nonlocal.mean,0.025), for.lcl=quantile(p.nonlocal.mean,0.975)) %>%
+#   bind_rows(mean.p.nonlocal.null) %>%
+#   mutate(prior=factor(prior, levels=c("only migration","combined abundance and migration","uninformative prior"))) %>%
+#   mutate(Age=ifelse(age==1,"Adult","Juvenile")) %>%
+#   #mutate(Kanton=levels(as.factor(woco.unk.sf$KANTON))[ctn]) %>%
   
-  ggplot(aes(x=ctn, y=for.med))+
+FIGURE2<-ggplot(data=FIGURE2dat,aes(x=ctn, y=for.med))+
   geom_point(aes(col=Age, shape=Age), position=position_dodge(width=0.2), size=2.5) +
   geom_errorbar(aes(ymin=for.lcl, ymax=for.ucl, col=Age), width=0.05, linewidth=1, position=position_dodge(width=0.2)) +
   facet_wrap(~prior, ncol = 1) +
