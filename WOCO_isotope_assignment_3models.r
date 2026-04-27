@@ -12,6 +12,8 @@
 
 ## also included annual isoscape suggested by David Soto
 
+## revised on 27 Apr 2026 after re-running migration model
+
 rm(list=ls())
 library(data.table)
 library(dplyr)
@@ -177,8 +179,8 @@ iso.constants <- list(nind.unkn = dim(woco.unk.sf)[1],
                       # b.mig.week=readRDS("output/woco_mig_depart_output_nimble.rds")$summary$all.chains[1,1],
                       # lm.mean.mig=logit(MCMCsummary(readRDS("output/woco_mig_depart_output_nimble.rds"))[2,1]),  ## became necessary after switching to stepwise run which produces different output than nimbleMCMC
                       # b.mig.week=MCMCsummary(readRDS("output/woco_mig_depart_output_nimble.rds"))[1,1],  ## became necessary after switching to stepwise run which produces different output than nimbleMCMC
-                      lm.mean.mig=logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[1,1])),
-                      b.mig.week=as.numeric(fread("output/woco_telemetry_seasonal_surv_parm.csv")[2,1]),
+                      lm.mean.mig=logit(as.numeric(fread("output/woco_telemetry_seasonal_surv_parm_raneff.csv")[1,1])),
+                      b.mig.week=as.numeric(fread("output/woco_telemetry_seasonal_surv_parm_raneff.csv")[2,1]),
                       unk.week=week(UNK_WC$feather_sampling_date)-week(ymd("2024-07-26"))   ## migration weeks start only in August
                       )
 
@@ -491,7 +493,7 @@ mean.p.nonlocal.migprior <- as_tibble(samples.migprior[,grep("p.nonlocal\\[", co
   mutate(age=iso.constants$age.unknown[ind]) %>%
   mutate(ctn=woco.unk.sf$KANTON[ind]) %>%
   mutate(prior="only migration")
-#fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
+fwrite(mean.p.nonlocal.migprior,"output/WOCO_nonlocal_probs_mig_prior.csv")
 
 # summarise across SUI
 
@@ -506,7 +508,7 @@ out.sui<- mean.p.nonlocal.migprior %>%
   mutate(prior="only migration") %>%
   bind_rows(out.sui)
 out.sui  
-#fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
+fwrite(out.sui,"output/woco_nonlocal_origin_estimates_SUI.csv")
 
 
 # summarise by Canton
@@ -523,7 +525,7 @@ out.ctn<- mean.p.nonlocal.migprior %>%
   mutate(prior="only migration") %>%
   bind_rows(out.ctn)
 out.ctn
-#fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
+fwrite(out.ctn,"output/woco_nonlocal_origin_estimates_CANTON.csv")
 
 
 
