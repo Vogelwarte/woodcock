@@ -341,6 +341,14 @@ mean.p.nonlocal <- as_tibble(samples[,grep("p.nonlocal\\[", colnames(samples))])
 
 mean.p.nonlocal %>% filter(is.na(age))
 
+
+# summarise across SUI and ages (for abstract)
+mean.p.nonlocal %>%
+  group_by(prior) %>%
+  summarise(foreign.med=median(p.nonlocal),foreign.lcl=quantile(p.nonlocal,0.025), foreign.ucl=quantile(p.nonlocal,0.975))
+
+
+
 # summarise across SUI
 
 out.sui<- mean.p.nonlocal %>%
