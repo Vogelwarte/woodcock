@@ -26,6 +26,11 @@
 ## assess the magnitude of extended encounter occasions 30 and 53
 
 
+## revised in May 2026 to remove all individuals never recorded in April - August (those can be assumed to be breeders): PM said that these are definitely local breeders
+## changed wk54 to wk53 because no records in wk53 anyway
+## reduced dimensions of woco_ch by 1 column
+
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -102,11 +107,23 @@ removals<-woco %>%
   group_by(Ring_num) %>%
   summarise(obs=sum(targetObs)) %>%
   filter(obs==0)
-
+dim(removals)
+dim(woco)
 woco<-woco %>% filter(!(Ring_num %in% removals$Ring_num))
+dim(woco)
 
 
+## added second level - remove individuals that were never caught in the UG outside the breeding season
 
+removals2<-woco %>%
+  mutate(targetObs=ifelse(month(Datum) %in% c(4,5,6,7,8) & Ort %in% c("Franche-Comté","UG"),1,0)) %>%
+  group_by(Ring_num) %>%
+  summarise(obs=sum(targetObs)) %>%
+  filter(obs==0)
+
+
+woco<-woco %>% filter(!(Ring_num %in% removals2$Ring_num))
+dim(woco)
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -278,7 +295,7 @@ woco_ann_ch_true<-woco %>%
   group_by(id, week) %>%
   summarise(N=max(TS)) %>%
   spread(key=week, value=N, fill=NA) %>%
-  mutate(wk54=NA)  ## create blank column for records past the migration season
+  mutate(wk53=NA)  ## create blank column for records past the migration season - ### CHANGED TO 53 after selecting fewer individuals
 
 woco_ann_ch_obs<-woco %>%
   mutate(year=year(Datum), week=week(Datum)) %>%
@@ -299,7 +316,7 @@ woco_ann_ch_obs<-woco %>%
   group_by(id, week) %>%
   summarise(N=max(OS)) %>%
   spread(key=week, value=N, fill=5) %>%
-  mutate(wk54=5)  ## create blank column for records past the migration season
+  mutate(wk53=5)  ## create blank column for records past the migration season ### CHANGED TO 53 after selecting fewer individuals
 
 
 woco_tag_mat<- woco %>%
@@ -346,7 +363,7 @@ effort_mat<- woco %>%
   group_by(year,week) %>%
   summarise(eff=sum(obs)) %>%
   spread(key=week,value=eff, fill=0) %>%
-  mutate(wk54=2)  ## create blank column for records past the migration season
+  mutate(wk53=2)  ## create blank column for records past the migration season
 
 ### summary of actual netting effort 
 netting <- read_excel("data/Data_Aufwand_Nov2024.xlsx", sheet="Tabelle1") %>%
@@ -551,7 +568,7 @@ max(effort)
 ############# QUANTIFY EXTENT OF USE OF SUPPLEMENTED OCCASIONS----------
 
 length(which(!is.na(woco_ann_ch_true[,2])))
-length(which(!is.na(woco_ann_ch_true[,25])))
+length(which(!is.na(woco_ann_ch_true[,24])))  ### changed from 25 to 24 after reducing N individuals
 length(unique(woco_ann_ch_obs$id))
 
 
@@ -586,5 +603,5 @@ n.individuals<-woco_ann_ch_obs %>%
 
 
 ############# SAVE  PREPARED DATA ----------
-save.image("data/woco_mig_input.RData")
+save.image("data/woco_mig_input_breed.RData")
 
