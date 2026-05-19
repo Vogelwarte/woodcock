@@ -22,6 +22,12 @@
 
 #### revised on 22 October 2025: fixed data prep to remove the faulty f.telemetry values
 
+#### revised 19 May 2026: removed many individuals that were never recorded in summer in UG (to exclude birds we cannot assume were breeders)
+
+
+
+
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -59,7 +65,7 @@ try(setwd("C:/STEFFEN/OneDrive - Vogelwarte/Woodcock"), silent=T)
 
 # Load data and likelihood function ---------------------------------------------------------------
 # prepared in script WOCO_survival_data_compilation.R
-load("data/woco_mig_input_autumn_only.RData")  ## option to remove _no_argos for full dataset
+load("data/woco_mig_input_breed.RData")  ## option to remove _no_argos for full dataset
 nimbleOptions(allowDynamicIndexing = TRUE)
 
 
