@@ -333,7 +333,7 @@ FIGURE1<-woco_mig %>%
   annotation_custom(wocoicon, xmin=lubridate::ymd("2024-08-01"), xmax=lubridate::ymd("2024-09-01"), ymin=0.8, ymax=1)+
 
   ### add vertical lines to specify key dates OF OLD HUNTING TIMES
-  geom_vline(aes(xintercept=min(Date[mig>0.95])), linetype="dashed", col="forestgreen", linewidth=1.5) +
+  geom_vline(aes(xintercept=min(Date[mig>0.94])), linetype="dashed", col="forestgreen", linewidth=1.5) +
   geom_segment(x=lubridate::ymd("2024-09-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
   geom_segment(x=lubridate::ymd("2024-10-01"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
   geom_segment(x=lubridate::ymd("2024-10-15"),y=0,yend=0.6, linetype="dashed", col="grey27", linewidth=2) +
@@ -380,7 +380,8 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
 woco_mig %>% 
   group_by(week) %>%
   summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
-  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% print(n=50)
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>%
+  filter(mig.ucl>0.94 & mig.lcl<0.96)
 
 
 
@@ -527,39 +528,39 @@ ggsave(plot=FIGURE2,
 
 
 
-# 4. FIGURE S1 ---------------
-medlast<-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
-  filter(Ort=="UG") %>%
-  mutate(year=year(Datum)) %>%
-  mutate(id=paste(Ring_num,year, sep="_")) %>%
-  mutate(jday=yday(Datum)) %>%
-  mutate(date=ymd("2023-12-31")+days(jday)) %>%
-  group_by(id) %>%
-  summarise(last=max(date)) %>%
-  ungroup() %>%
-  summarise(day=median(last))
-
-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
-  filter(Ort=="UG") %>%
-  mutate(year=year(Datum)) %>%
-  mutate(id=paste(Ring_num,year, sep="_")) %>%
-  mutate(jday=yday(Datum)) %>%
-  mutate(date=ymd("2023-12-31")+days(jday)) %>%
-  group_by(id) %>%
-  summarise(last=max(date)) %>%
-  ggplot(aes(x=last)) +
-  geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),after_stat(PANEL),sum)[after_stat(PANEL)]),binwidth=7)+  
-  ### add vertical lines to specify median date of last observation
-  geom_vline(aes(xintercept=medlast$day), linetype="dashed", col="firebrick", linewidth=1.5) +
-  scale_x_date(name="last observation in study area",date_breaks="1 week", date_labels="%d-%b")+
-  labs(y="proportion of woodcocks") +
-  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        axis.text.x=element_text(size=12, color="black",angle=45,hjust = 1),
-        axis.text.y=element_text(size=18, color="black"), 
-        axis.title=element_text(size=18), 
-        strip.text.x=element_text(size=18, color="black"), 
-        strip.background=element_rect(fill="white", colour="black"))
-#ggsave("manuscript/Figure_S1.jpg", width=8, height=6)
+# # 4. FIGURE S1 ---------------
+# medlast<-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+#   filter(Ort=="UG") %>%
+#   mutate(year=year(Datum)) %>%
+#   mutate(id=paste(Ring_num,year, sep="_")) %>%
+#   mutate(jday=yday(Datum)) %>%
+#   mutate(date=ymd("2023-12-31")+days(jday)) %>%
+#   group_by(id) %>%
+#   summarise(last=max(date)) %>%
+#   ungroup() %>%
+#   summarise(day=median(last))
+# 
+# woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+#   filter(Ort=="UG") %>%
+#   mutate(year=year(Datum)) %>%
+#   mutate(id=paste(Ring_num,year, sep="_")) %>%
+#   mutate(jday=yday(Datum)) %>%
+#   mutate(date=ymd("2023-12-31")+days(jday)) %>%
+#   group_by(id) %>%
+#   summarise(last=max(date)) %>%
+#   ggplot(aes(x=last)) +
+#   geom_histogram(aes(x=last,y=(after_stat(count))/tapply(after_stat(count),after_stat(PANEL),sum)[after_stat(PANEL)]),binwidth=7)+  
+#   ### add vertical lines to specify median date of last observation
+#   geom_vline(aes(xintercept=medlast$day), linetype="dashed", col="firebrick", linewidth=1.5) +
+#   scale_x_date(name="last observation in study area",date_breaks="1 week", date_labels="%d-%b")+
+#   labs(y="proportion of woodcocks") +
+#   theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+#         axis.text.x=element_text(size=12, color="black",angle=45,hjust = 1),
+#         axis.text.y=element_text(size=18, color="black"), 
+#         axis.title=element_text(size=18), 
+#         strip.text.x=element_text(size=18, color="black"), 
+#         strip.background=element_rect(fill="white", colour="black"))
+# #ggsave("manuscript/Figure_S1.jpg", width=8, height=6)
 
 
 
@@ -627,6 +628,20 @@ length(UNK_WC$dH)/9681
 table(UNK_WC$AGE)
 summary(ORIG_WC$dH)
 summary(UNK_WC$dH)
+
+
+# overall proportion for abstract
+fread("output/woco_nonlocal_origin_estimates_SUI.csv") %>%
+  dplyr::filter(prior=="combined abundance and migration") %>%
+  arrange(Age) %>%
+  mutate(N=as.numeric(table(UNK_WC$AGE))) %>%
+  group_by(prior) %>%
+  summarise(foreign.med = weighted.mean(foreign.med, N),
+            foreign.lcl = weighted.mean(foreign.lcl, N),
+            foreign.ucl = weighted.mean(foreign.ucl, N)
+            )
+
+
 
 
 
