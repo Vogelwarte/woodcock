@@ -10,6 +10,7 @@
 ## revised on 27 April to update figures and tables for revision
 
 ## revised on 20 May to update numbers in manuscript after removing non-breeders
+## completely revised Table 1 to distingusih between birds caught in breeding and outside breeding season
 
 
 
@@ -76,47 +77,60 @@ unique(woco$Beobachtung)
 # weirdobs<-woco %>% filter(is.na(Beobachtung))
 # woco %>% filter(Ring %in% weirdobs$Ring)
 
+origins<-woco %>%
+  dplyr::filter(Beobachtung=="Fang") %>%
+  group_by(Ring) %>%
+  summarise(first=min(Datum),total=length(Datum)) %>%
+  mutate(season=if_else(month(first) %in% c(4,5,6,7,8),"breeding","migration")) 
 
 all_birds<-woco %>%
   dplyr::filter(Beobachtung=="Fang") %>%
   group_by(Ring) %>%
   summarise(first=min(Datum),total=length(Datum)) %>%
-  mutate(season=if_else(month(first) %in% c(5,6,7,8),"breeding","migration")) %>%
+  mutate(season=if_else(month(first) %in% c(4,5,6,7,8),"breeding","migration")) %>%
   ungroup() %>%
   group_by(season) %>%
   summarise(N=length(unique(Ring))) %>%
-  adorn_totals()
+  tidyr::pivot_wider(values_from=N,names_from=season,values_fill=0)
 
 dead_birds<-woco %>%
   dplyr::filter(Beobachtung=="Totfund") %>%
-  group_by(Ort, Todesursache) %>%
+  left_join(origins, by='Ring') %>%
+  group_by(Ort, Todesursache,season) %>%
   summarise(N=length(unique(Ring))) %>%
+  tidyr::pivot_wider(values_from=N,names_from=season,values_fill=0) %>%
   adorn_totals()
 
 tagged_birds<-woco %>%
   dplyr::filter(Beobachtung=="Fang") %>%
-  group_by(Ring, Sendertyp) %>%
+  left_join(origins, by='Ring') %>%
+  group_by(Ring, Sendertyp, season) %>%
   summarise(first=min(Datum),total=length(Datum))
 
-argos_birds<-tagged_birds %>%
-  dplyr::filter(Sendertyp=="ARGOS")
-argos_birds %>%
-  ungroup() %>%
-  summarise(N=length(unique(Ring)))
+argos_birds_ids<-tagged_birds %>%
+  dplyr::filter(Sendertyp=="ARGOS") %>%
+  ungroup()
+argos_birds<-argos_birds_ids %>%
+  group_by(season) %>%
+  summarise(N=length(unique(Ring))) %>%
+  tidyr::pivot_wider(values_from=N,names_from=season,values_fill=0)
 
-vhf_birds<-tagged_birds %>%
+vhf_birds_ids<-tagged_birds %>%
   dplyr::filter(Sendertyp=="VHF") %>%
-  dplyr::filter(!(Ring %in% argos_birds$Ring))
-vhf_birds %>%
-  ungroup() %>%
-  summarise(N=length(unique(Ring)))
+  dplyr::filter(!(Ring %in% argos_birds_ids$Ring)) %>%
+  ungroup()
+vhf_birds<-vhf_birds_ids %>%
+  group_by(season) %>%
+  summarise(N=length(unique(Ring))) %>%
+  tidyr::pivot_wider(values_from=N,names_from=season,values_fill=0)
 
 ringonly_birds<-tagged_birds %>%
-  dplyr::filter(!(Ring %in% vhf_birds$Ring)) %>%
-  dplyr::filter(!(Ring %in% argos_birds$Ring))
-ringonly_birds %>%
+  dplyr::filter(!(Ring %in% vhf_birds_ids$Ring)) %>%
+  dplyr::filter(!(Ring %in% argos_birds_ids$Ring)) %>%
   ungroup() %>%
-  summarise(N=length(unique(Ring)))
+  group_by(season) %>%
+  summarise(N=length(unique(Ring))) %>%
+  tidyr::pivot_wider(values_from=N,names_from=season,values_fill=0)
 
 
 # doubletagged_birds<-woco %>%
@@ -134,8 +148,26 @@ singlecaps <- woco %>%
   group_by(Ring) %>%
   summarise(N=length(Datum)) %>%
   filter(N==1) %>%
+  left_join(origins, by='Ring') %>%
   ungroup() %>%
-  summarise(N=length(unique(Ring)))
+  group_by(season) %>%
+  summarise(N=length(unique(Ring))) %>%
+  tidyr::pivot_wider(values_from=N,names_from=season,values_fill=0)
+
+
+
+## all numbers for Table S1
+all_birds
+ringonly_birds
+vhf_birds
+argos_birds
+dead_birds
+singlecaps
+
+
+
+
+
 
 
 ## 1.2 TABLE S2 ---------------
