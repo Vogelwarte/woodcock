@@ -449,7 +449,7 @@ names(out)[c(3,4,5)]<-c('lcl','median', 'ucl')
 #out<-out %>%  select(parameter,Mean, median, lcl, ucl,SSeff,psrf)
 out
 fwrite(out,"output/woco_telemetry_seasonal_surv_parm_raneff.csv")
-#out<-fread("output/woco_telemetry_seasonal_surv_parm_raneff_autumn_only.csv")
+#out<-fread("output/woco_telemetry_seasonal_surv_parm_raneff.csv")
 
 
 #### CALCULATE APPROXIMATE ANNUAL SURVIVAL
@@ -581,7 +581,7 @@ stopCluster(cl)
 # }
 
 saveRDS(woco.mig,"output/woco_mig_depart_simulation.rds")
-#woco_mig<-readRDS("output/woco_mig_depart_simulation.rds")
+#woco.mig<-readRDS("output/woco_mig_depart_simulation.rds")
 
 
 

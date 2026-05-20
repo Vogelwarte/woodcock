@@ -9,6 +9,10 @@
 
 ## revised on 27 April to update figures and tables for revision
 
+## revised on 20 May to update numbers in manuscript after removing non-breeders
+
+
+
 # Clear workspace ---------------------------------------------------------
 
 rm(list=ls()) 
@@ -52,6 +56,12 @@ imgWOCO<-image_read("manuscript/woodcock.jpg") %>% image_transparent("white", fu
 wocoicon <- rasterGrob(imgWOCO, interpolate=TRUE)
 
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 1. LOAD DATA AND REPORT BASIC QUANTITIES IN MANUSCRIPT -------------------------
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 # Load data ---------------------------------------------------------------
 
 woco <- read_excel("data/Daten_Waldschnepfe.xlsx", sheet="Data") %>%
@@ -61,7 +71,7 @@ woco <- read_excel("data/Daten_Waldschnepfe.xlsx", sheet="Data") %>%
 woco
 
 
-# 1. TABLE S1 ---------------
+## 1.1. TABLE S1 ---------------
 unique(woco$Beobachtung)
 # weirdobs<-woco %>% filter(is.na(Beobachtung))
 # woco %>% filter(Ring %in% weirdobs$Ring)
@@ -128,7 +138,7 @@ singlecaps <- woco %>%
   summarise(N=length(unique(Ring)))
 
 
-## 1.1 TABLE S2 ---------------
+## 1.2 TABLE S2 ---------------
 
 TableS2<-woco %>%
   dplyr::filter(Beobachtung=="Fang") %>%
@@ -145,6 +155,159 @@ TableS2<-woco %>%
   adorn_totals()
 
 #fwrite(TableS2,"manuscript/Table_S2.csv")
+
+
+
+## 1.3 SIMPLE NUMBERS FOR MANUSCRIPT AFTER FILTERING NON-BREEDERS ---------------
+
+
+# FILTER DATA by removing individuals with no record in Aug - Dec
+
+removals<-woco %>%
+  mutate(targetObs=ifelse(month(Datum)>7,1,0)) %>%
+  group_by(Ring_num) %>%
+  summarise(obs=sum(targetObs)) %>%
+  filter(obs==0)
+woco_all<-woco
+woco<-woco %>% filter(!(Ring_num %in% removals$Ring_num))
+
+dim(woco)
+
+## added second level - remove individuals that were never caught in the UG outside the breeding season
+
+removals2<-woco %>%
+  mutate(targetObs=ifelse(month(Datum) %in% c(4,5,6,7,8) & Ort %in% c("Franche-Comté","UG"),1,0)) %>%
+  group_by(Ring_num) %>%
+  summarise(obs=sum(targetObs)) %>%
+  filter(obs==0)
+
+woco<-woco %>% filter(!(Ring_num %in% removals2$Ring_num))
+dim(woco)
+
+
+table(woco$Ort)
+table(woco$age)
+hist(month(woco$Datum))
+table(woco$Beobachtung)
+table(woco$Markierung)
+table(woco$Markierung, woco$Sendertyp)
+table(woco$Censor)
+length(unique(woco$Ring_num))
+woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  mutate(jday=yday(Datum)) %>%
+  ggplot(aes(x=jday)) + geom_histogram()
+
+table(woco$Beobachtung, woco$Ort)
+
+
+woco %>% group_by(Ring, Markierung, Sendertyp) %>%
+  summarise(n_encounter=length(Datum)) %>%
+  ungroup() %>%
+  mutate(N=1) %>%
+  group_by(Markierung, Sendertyp) %>%
+  summarise(N_birds=sum(N))
+
+
+
+## 1.4 FIGURE S1 for known breeders ---------------
+
+medlast<-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  filter(Ort=="UG") %>%
+  mutate(year=year(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  mutate(jday=yday(Datum)) %>%
+  mutate(date=ymd("2023-12-31")+days(jday)) %>%
+  group_by(id) %>%
+  summarise(last=max(date)) %>%
+  ungroup() %>%
+  summarise(day=median(last), min=min(last), max=max(last), sd=sd(last))
+medlast
+
+medlast_all<-woco_all %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  filter(Ort=="UG") %>%
+  mutate(year=year(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  mutate(jday=yday(Datum)) %>%
+  mutate(date=ymd("2023-12-31")+days(jday)) %>%
+  group_by(id) %>%
+  summarise(last=max(date)) %>%
+  ungroup() %>%
+  summarise(day=median(last), min=min(last), max=max(last), sd=sd(last))
+medlast_all
+
+
+histdat1<-woco_all %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  filter(Ort=="UG") %>%
+  mutate(year=year(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  mutate(jday=yday(Datum)) %>%
+  mutate(date=ymd("2023-12-31")+days(jday)) %>%
+  group_by(id) %>%
+  summarise(last=max(date)) %>%
+  mutate(Group="All birds (n = 451)")
+
+histdat<-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
+  filter(Ort=="UG") %>%
+  mutate(year=year(Datum)) %>%
+  mutate(id=paste(Ring_num,year, sep="_")) %>%
+  mutate(jday=yday(Datum)) %>%
+  mutate(date=ymd("2023-12-31")+days(jday)) %>%
+  group_by(id) %>%
+  summarise(last=max(date)) %>%
+  mutate(Group="Local breeders (n = 110)") %>%
+  bind_rows(histdat1)
+
+
+    
+    
+colors <- c("All birds (n = 451)" = "#df8640", "Local breeders (n = 110)" = "#377EB8")
+
+
+breaks <- seq(
+  min(histdat$last, na.rm = TRUE),
+  max(histdat$last, na.rm = TRUE),
+  by = 7
+)
+
+
+FIGURES1<-histdat %>%
+  mutate(bin = cut(last, breaks = breaks, include.lowest = TRUE)) %>%
+  count(Group, bin) %>%
+  group_by(Group) %>%
+  mutate(prop = n / sum(n))  %>%
+  
+  ggplot(aes(x = ymd(bin), y = prop, fill = Group)) +
+  geom_bar(stat = "identity", position = position_dodge(width=2.5,preserve = "single"), alpha = 0.8, width = 3) +
+  
+  ## format axis ticks
+  labs(y="Proportion of woodcocks",
+       x="Last observation in study area",
+       fill="Marked individuals") +
+  scale_x_date(name="Last observation in study area",date_breaks="1 week", date_labels="%d-%b")+
+  scale_y_continuous(breaks=seq(0,0.25,0.05))+
+  scale_fill_manual(values = colors) +
+  ### add vertical lines to specify median date of last observation
+  geom_vline(aes(xintercept=medlast_all$day), col= "#df8640", linetype="dashed", linewidth=1.5) +
+  geom_vline(aes(xintercept=medlast$day), col="#377EB8" , linetype="dashed", linewidth=1.5) +
+  
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x=element_text(size=12, color="black",angle=45,hjust = 1),
+        axis.text.y=element_text(size=18, color="black"), 
+        axis.title=element_text(size=18), 
+        strip.text.x=element_text(size=18, color="black"), 
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.title=element_text(size=16, color="black"),
+        legend.text=element_text(size=14, color="black"),
+        legend.position="inside",
+        legend.key = element_rect(fill = NA, color = NA),
+        legend.background = element_rect(fill = NA, color = NA),
+        legend.position.inside=c(0.2,0.9),
+        strip.background=element_rect(fill="white", colour="black"))
+FIGURES1
+#ggsave(FIGURES1, filename="manuscript/FIGURE_S1.jpg",device="jpg",width=12, height=9)
+
 
 
 
@@ -211,6 +374,19 @@ out %>% filter(startsWith(parameter,"mean.phi")) %>%
   mutate(ann.surv=mean^52,lcl.ann.surv=lcl^52,ucl.ann.surv=ucl^52) %>%
   select(median, lcl, ucl, ann.surv,lcl.ann.surv,ucl.ann.surv) %>%
   slice_max(median) 
+
+## 2.2. CALCULATE 95% DEPARTURE
+## check the week when mig is 0.95 (and lcl and ucl)
+woco_mig %>% 
+  group_by(week) %>%
+  summarise(mig=quantile(prop_mig,0.5),mig.lcl=quantile(prop_mig,0.025),mig.ucl=quantile(prop_mig,0.975)) %>%
+  mutate(Date=lubridate::ymd("2024-07-26") + lubridate::weeks(week - 1)) %>% print(n=50)
+
+
+
+
+
+
 
 
 
@@ -818,42 +994,6 @@ ggsave(plot=FIG_s5,
 
 
 
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# 9. REPORT QUANTITIES IN MANUSCRIPT -------------------------
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-# FILTER DATA by removing individuals with no record in Aug - Dec
-
-removals<-woco %>%
-  mutate(targetObs=ifelse(month(Datum)>7,1,0)) %>%
-  group_by(Ring_num) %>%
-  summarise(obs=sum(targetObs)) %>%
-  filter(obs==0)
-
-woco<-woco %>% filter(!(Ring_num %in% removals$Ring_num))
-
-table(woco$Ort)
-table(woco$age)
-hist(month(woco$Datum))
-table(woco$Beobachtung)
-table(woco$Markierung)
-table(woco$Markierung, woco$Sendertyp)
-table(woco$Censor)
-length(unique(woco$Ring_num))
-woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
-  mutate(jday=yday(Datum)) %>%
-  ggplot(aes(x=jday)) + geom_histogram()
-
-table(woco$Beobachtung, woco$Ort)
-
-
-woco %>% group_by(Ring, Markierung, Sendertyp) %>%
-  summarise(n_encounter=length(Datum)) %>%
-  ungroup() %>%
-  mutate(N=1) %>%
-  group_by(Markierung, Sendertyp) %>%
-  summarise(N_birds=sum(N))
 
 
 
