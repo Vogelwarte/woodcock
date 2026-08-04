@@ -145,6 +145,8 @@ woco %>% filter(month(Datum) %in% c(8,9,10,11)) %>%
 
 table(woco$Beobachtung, woco$Ort)
 
+table(woco$Beobachtung, month(woco$Datum))
+
 
 woco %>% group_by(Ring, Markierung, Sendertyp) %>%
   summarise(n_encounter=length(Datum)) %>%
